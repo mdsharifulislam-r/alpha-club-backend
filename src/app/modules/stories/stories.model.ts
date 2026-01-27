@@ -12,17 +12,15 @@ const storySchema = new Schema<IStory, StoryModel>(
       type: String,
       trim: true,
     },
-    image: {
-      type: String,
-      trim: true,
-    },
-    club: {
-      type: Schema.Types.ObjectId,
-      ref: 'Club',
-    },
+    image:[
+      {
+        type: String,
+        trim: true,
+      }
+    ],
     published: {
       type: Boolean,
-      default: false,
+      default: true,
     },
   },
   { timestamps: true }

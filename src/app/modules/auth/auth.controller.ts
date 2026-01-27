@@ -4,6 +4,19 @@ import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
 import { AuthService } from './auth.service';
 
+// Handles account renewal requests
+const renualRequest = catchAsync(async (req: Request, res: Response) => {
+  const { phone } = req.body;
+  // You may want to handle more fields depending on requirements
+  await AuthService.renualRequestToDB(phone);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'Your renewal request has been sent.'
+  });
+});
+
 const verifyOtp = catchAsync(async (req: Request, res: Response) => {
   const { ...verifyData } = req.body;
   const result = await AuthService.verifyOTPToDB(verifyData);
@@ -15,7 +28,6 @@ const verifyOtp = catchAsync(async (req: Request, res: Response) => {
     data: result
   });
 });
-
 
 const verifyResetOtp = catchAsync(async (req: Request, res: Response) => {
   const { ...verifyData } = req.body;
@@ -53,7 +65,6 @@ const adminLoginUser = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-
 const forgetPassword = catchAsync(async (req: Request, res: Response) => {
   const email = req.body.email;
   await AuthService.forgetPasswordToDB(email);
@@ -77,7 +88,6 @@ const resetPassword = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-
 const resendOTPtoDB = catchAsync(async (req: Request, res: Response) => {
   const email = req.body.email;
   await AuthService.resendOTPtoDB(email);
@@ -88,8 +98,6 @@ const resendOTPtoDB = catchAsync(async (req: Request, res: Response) => {
     message: 'OTP resend successfully',
   });
 });
-
-
 
 const changePassword = catchAsync(async (req: Request, res: Response) => {
   const user = req.user;
@@ -103,7 +111,6 @@ const changePassword = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-
 export const AuthController = {
   verifyOtp,
   verifyResetOtp,
@@ -112,5 +119,6 @@ export const AuthController = {
   resetPassword,
   resendOTPtoDB,
   changePassword,
-  adminLoginUser
+  adminLoginUser,
+  renualRequest
 };

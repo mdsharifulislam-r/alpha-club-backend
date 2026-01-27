@@ -29,12 +29,13 @@ const updateUser = catchAsync(
     const userId = req.user?.id;
     let profileImage = getSingleFilePath(req.files, 'profileImage');
 
-    const { name, preferences, restaurant_crowd_status , status} = req.body;
+    const { name, preferences, restaurant_crowd_status , status, fcmToken} = req.body;
 
     const data: any = {};
 
     if (profileImage) data.profileImage = profileImage;
     if (name != null) data.name = name;
+    if (fcmToken != null) data.fcmToken = fcmToken;
     if (preferences != null) data.preferences = preferences;
     if (restaurant_crowd_status != null) data.restaurant_crowd_status = restaurant_crowd_status;
     if(req?.user?.role === USER_ROLES.SUPER_ADMIN && req?.body?.role != null) data.role = req?.body?.role
@@ -117,11 +118,24 @@ const getStatistics = catchAsync(async (req: Request, res: Response) => {
 });
 
 
+const sendNotificationToUsers = catchAsync(async (req: Request, res: Response) => {
+  const result = await UserService.sendNotificationToUsers(req.body?.message, req.body?.usersId);
+  
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'Notification send successfully',
+    data: result,
+  });
+});
+
+
 export const UserController = {
   updateUser,
   createNewUser,
   getAllUsers,
   getProfile,
   getStatistics,
-  updateSingleUser
+  updateSingleUser,
+  sendNotificationToUsers
 };

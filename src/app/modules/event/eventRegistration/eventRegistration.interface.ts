@@ -9,6 +9,13 @@ export type IEventRegistration = {
   event: mongo.ObjectId | IEvent;                        
   status?: EventRegistrationStatus;
   registrationEnable:Boolean,
+  guests?:[
+    {
+      name:string,
+      email:string,
+      phone:string
+    }
+  ],
   createdAt?: Date;
   updatedAt?: Date;
 };

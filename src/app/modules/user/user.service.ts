@@ -11,6 +11,11 @@ import { userSearchableField } from './user.constant';
 import { Event } from '../event/event.model';
 import { ExclusiveOffer } from '../exclusiveOffer/exclusiveOffer.model';
 import { Club } from '../club/club.model';
+import { MemberShipApplication } from '../membershipApplication/membershipApplication.model';
+import { Notification } from '../notification/notification.mode';
+import { NotificationCount } from '../notification/notificationCountModel';
+import { USER_ROLES } from '../../../enums/user';
+import admin from '../../../helpers/firebaseConfig';
 
 
 
@@ -46,7 +51,7 @@ const createUserToDB = async (payload: Partial<IUser>): Promise<{ message: strin
     name: createUser.name
   };
   const verifyAccount = emailTemplate.verifyAccount(value);
-    emailHelper.sendEmail(verifyAccount);
+  emailHelper.sendEmail(verifyAccount);
 
   // Save OTP and expiry to DB
   const authentication = {
@@ -58,12 +63,126 @@ const createUserToDB = async (payload: Partial<IUser>): Promise<{ message: strin
   return { message: "User created successfully" };
 };
 
+
+// const sendNotificationToUsers = async (message: string,fcmToken?:string,  usersId: string[] = []) => {
+//   const users = usersId.length
+//     ? await User.find({
+//       _id: { $in: usersId },
+//       status: "active",
+//     })
+//     : await User.find({
+//       status: "active",
+//       role: { $nin: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] },
+//     }) as IUser[];
+
+
+//  for (const user of users) {
+//   // ✅ Use user's own FCM token
+//   if (user.fcmToken) {
+//     try {
+//       const messageInfo = {
+//         token: user.fcmToken,
+//         notification: {
+//           title: "New Notification",
+//           body: message,
+//         },
+//         data: {
+//           receiver: String(user._id),
+//           sender: "system",
+//           title: message,
+//           path: "/notifications",
+//         },
+//       };
+//       await admin.messaging().send(messageInfo);
+//     } catch (error) {
+//       console.error("FCM send error:", error);
+//     }
+//   }
+
+//   // DB Notification
+//   Notification.create({
+//     receiver: user._id,
+//     title: "New Notification",
+//     message,
+//     sender: null,
+//     path: "/notifications",
+//     seen: false,
+//   }).catch(() => {});
+
+//   NotificationCount.findOneAndUpdate(
+//     { user: user._id },
+//     { $inc: { count: 1 } },
+//     { new: true, upsert: true }
+//   ).catch(() => {});
+// }
+
+// };
+
+const sendNotificationToUsers = async (
+  message: string,
+  usersId: string[] = []
+) => {
+  const users = usersId.length
+    ? await User.find({ _id: { $in: usersId }, status: "active" }).select('fcmToken _id role active').lean()
+    : await User.find({
+        status: "active",
+        role: { $nin: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] },
+      }).select('fcmToken _id role active').lean() as IUser[];
+
+      console.log({users})
+
+  // Push notifications
+  await Promise.allSettled(
+    users
+      .filter((user) => user.fcmToken)
+      .map((user) =>
+        admin.messaging().send({
+          token: user.fcmToken!,
+          notification: {
+            title: "New Notification",
+            body: message,
+          },
+          data: {
+            receiver: String(user._id),
+            sender: "system",
+            path: "/notifications",
+          },
+        })
+      )
+  );
+
+  // DB operations (with logging)
+  await Promise.allSettled(
+    users.map(async (user) => {
+      try {
+        await Notification.create({
+          receiver: user._id,
+          title: "New Notification",
+          message,
+          refId:user._id,
+          sender: null,
+          path: "/notifications",
+          seen: false,
+        });
+
+        await NotificationCount.findOneAndUpdate(
+          { user: user._id },
+          { $inc: { count: 1 } },
+          { new: true, upsert: true }
+        );
+      } catch (err) {
+        console.error("Notification DB error for user:", user._id, err);
+      }
+    })
+  );
+};
+
+
+
 const updateUserToDB = async (
   userId: string,
   payload: Partial<IUser>
 ): Promise<IUser | null> => {
-
-  console.log("payload", userId, payload);
 
   const isExistUser = await User.findById(userId);
   if (!isExistUser) {
@@ -82,6 +201,10 @@ const updateUserToDB = async (
   // prevent empty update
   if (Object.keys(payload).length === 0) {
     return isExistUser;
+  }
+
+  if (payload?.name) {
+    await MemberShipApplication.findOneAndUpdate(isExistUser.application_form, { name: payload.name })
   }
 
   const updatedUser = await User.findOneAndUpdate(
@@ -138,7 +261,7 @@ const updateSingleUserToDB = async (
 };
 
 
-const getAllUsers = async (query: Record<string, any> , userId: string) => {
+const getAllUsers = async (query: Record<string, any>, userId: string) => {
   console.log(userId)
   const result = new QueryBuilder(User.find({ _id: { $ne: userId } }), query)
     .paginate()
@@ -147,7 +270,7 @@ const getAllUsers = async (query: Record<string, any> , userId: string) => {
     .filter()
     .sort();
 
-  const data = await result.modelQuery.lean().populate('application_form','membershipType');
+  const data = await result.modelQuery.lean().populate('application_form', 'membershipType');
 
   const pagination = await result.getPaginationInfo();
 
@@ -247,5 +370,6 @@ export const UserService = {
   updateUserToDB,
   getProfile,
   getStatistics,
-  updateSingleUserToDB
+  updateSingleUserToDB,
+  sendNotificationToUsers
 };

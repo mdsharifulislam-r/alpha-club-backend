@@ -48,6 +48,11 @@ router.post(
 );
 
 router.post(
+  '/renewal-request',
+  AuthController.renualRequest
+);
+
+router.post(
   '/change-password',
   auth(USER_ROLES.ADMIN,USER_ROLES.SUPER_ADMIN,USER_ROLES.USER),
   validateRequest(AuthValidation.createChangePasswordZodSchema),

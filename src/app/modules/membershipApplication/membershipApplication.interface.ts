@@ -10,7 +10,7 @@ export type IMemberShipApplication = {
   email: string;
   phone: string;
   address?: string;
-
+  image?:string;
   familyMembers?: Array<{
     name: string;
     email: string;

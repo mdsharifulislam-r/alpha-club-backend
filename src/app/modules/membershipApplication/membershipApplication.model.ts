@@ -52,6 +52,10 @@ const memberShipApplicationSchema = new Schema<IMemberShipApplication, MemberShi
       required: true,
       trim: true,
     },
+    image: {
+      type: String,
+      default: 'https://i.ibb.co/z5YHLV9/profile.png',
+    },
     address: {
       type: String,
       trim: true,

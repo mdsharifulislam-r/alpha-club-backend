@@ -15,6 +15,7 @@ import { User } from '../user/user.model';
 import generateOTP from '../../../util/generateOTP';
 import { IUser } from '../user/user.interface';
 import { USER_ROLES } from '../../../enums/user';
+import { IMemberShipApplication } from '../membershipApplication/membershipApplication.interface';
 
 
 //resend otp
@@ -237,8 +238,9 @@ const loginUserFromDB = async (payload: ILoginData) => {
   //check user status
   if (isExistUser.status === 'block') {
     throw new ApiError(
-      StatusCodes.BAD_REQUEST,
-      'You don’t have permission to access this content.It looks like your account has been blocked.'
+      StatusCodes.FORBIDDEN,
+      'Your Membership has expired.'
+      // 'You don’t have permission to access this content.It looks like your account has been blocked.'
     );
   }
 
@@ -425,6 +427,41 @@ const changePasswordToDB = async (
 };
 
 
+const renualRequestToDB = async (phone: string) => {
+  // Find the user by phone number
+  const user = await User.findOne({ phone })
+    .lean()
+    .populate({
+      path: 'application_form',
+      select: 'memberShipId membershipType', // select only these two
+    });
+  if (!user) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  }
+
+  // Find all admins & super admins
+  const admins = await User.find({
+    role: { $in: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] }
+  }).lean();
+
+  // Prepare optional values in case application_form is available
+  const memberShipId = (user.application_form as any)?.memberShipId || '';
+  const membershipType = (user.application_form as any )?.membershipType || '';
+
+  // Send renewal request email to each admin/super admin - run in background (no await)
+  admins.forEach((admin) => {
+    const renewalRequestEmail = emailTemplate.renewalRequest({
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      adminEmail: admin.email,
+      memberShipId,
+      membershipType,
+    });
+    emailHelper.sendEmail(renewalRequestEmail); // no await, runs in background
+  });
+
+};
 
 export const AuthService = {
   adminloginUserFromDB,
@@ -434,6 +471,7 @@ export const AuthService = {
   resendOTPtoDB,
   verifyOTPToDB,
   verifyResetOtp,
-  changePasswordToDB
+  changePasswordToDB,
+  renualRequestToDB
 
 };

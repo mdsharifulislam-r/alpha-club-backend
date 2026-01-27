@@ -50,6 +50,9 @@ const userSchema = new Schema<IUser, UserModal>(
       type: Boolean,
       default: false,
     },
+    fcmToken: {
+      type: String
+    },
     application_form: {
       type: Schema.Types.ObjectId,
       ref: 'MemberShipApplication',

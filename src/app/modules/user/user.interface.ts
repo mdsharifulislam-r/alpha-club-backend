@@ -14,6 +14,7 @@ export type IUser = {
   verified?: boolean;
   application_form:mongoose.ObjectId;
   hasPasswordSave:Boolean;
+  fcmToken?:string;
   authentication?: {
     isResetPassword?: boolean;
     oneTimeCode?: number | null;

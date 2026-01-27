@@ -3,10 +3,10 @@ import { StatusCodes } from 'http-status-codes';
 import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
 import { StoryService } from './stories.service';
-import { getSingleFilePath } from '../../../shared/getFilePath';
+import { getMultipleFilesPath, getSingleFilePath } from '../../../shared/getFilePath';
 
 const create = catchAsync(async (req: Request, res: Response) => {
-  const image = getSingleFilePath(req.files, 'image');
+  const image = getMultipleFilesPath(req.files, 'image');
   const data = {
     ...req.body,
     ...(image && { image }),

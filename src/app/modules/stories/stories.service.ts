@@ -20,7 +20,7 @@ const getAllFromDB = async (query: Record<string, any>, role: string) => {
     query.published = true
   }
 
-  const qb = new QueryBuilder(Story.find().populate('club', 'name published'), appQuery)
+  const qb = new QueryBuilder(Story.find(), appQuery)
     .paginate()
     .search(['title', 'description'])
     .fields()
@@ -70,7 +70,7 @@ const getAllFromDB = async (query: Record<string, any>, role: string) => {
 };
 
 const getByIdFromDB = async (id: string) => {
-  const story = await Story.findById(id).populate('club').lean();
+  const story = await Story.findById(id).lean();
 
   if (!story) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Story not found');

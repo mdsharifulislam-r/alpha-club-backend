@@ -333,6 +333,91 @@ const applicationFormAdmin = (values: IApplicationFormAdminValues) => {
   };
   return data;
 };
+const renewalRequest = (values: { name: string; email: string; phone: string; adminEmail: string; memberShipId?: string; membershipType?: string; userMessage?: string }) => {
+  // Directly display membershipType dynamically (no prettify/transform/case handling)
+  const displayMembershipType = typeof values.membershipType === 'string' && values.membershipType.trim().length > 0
+    ? values.membershipType
+    : '';
+
+  const data = {
+    to: values.adminEmail,
+    subject: 'Membership Renewal Request - Action Required',
+    html: `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Membership Renewal Request</title>
+      </head>
+      <body style="font-family: 'Inter', Arial, sans-serif; background: #f6f8fb; margin: 0; padding: 0;">
+        <div style="max-width: 530px; margin: 40px auto; background: #ffffff; border-radius: 18px; padding: 38px 28px 34px 28px; box-shadow: 0 8px 30px rgba(20,34,58,0.10);">
+          <h1 style="color: #295ec9; font-size: 22px; font-weight: bold; margin: 0 0 18px 0;">
+            Membership Renewal Request
+          </h1>
+          <p style="font-size:16px; color:#374151; margin-bottom:18px;">
+            Dear Administrator,<br><br>
+            This is to notify you that the following member's membership has <b>expired</b> and renewal has been formally requested.
+          </p>
+          <div style="background: #f1f5fa; border-radius: 12px; padding: 18px 0 14px 0; margin-bottom: 22px; border: 1px solid #e3eafa;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%; font-size: 15px; color: #223;">
+                <tr>
+                  <td style="font-weight:bold; padding:4px 8px 4px 18px; vertical-align:top; color:#74839b;">Membership ID</td>
+                  <td style="padding:4px 18px 4px 0; color: #295ec9; font-size: 18px; font-weight: 600;">
+                    ${values.memberShipId || '<span style="color:#9ca3af;">Not Provided</span>'}
+                  </td>
+                </tr>
+                ${displayMembershipType ? `
+                <tr>
+                  <td style="font-weight:bold; padding:4px 8px 4px 18px; vertical-align:top; color:#74839b;">Membership Type</td>
+                  <td style="padding:4px 18px 4px 0; color: #295ec9; font-size: 16px; font-weight: 500;">
+                    ${displayMembershipType.replace(/(^\w|_\w)/g, match => match.replace('_', ' ').toUpperCase())}
+                  </td>
+                </tr>
+                ` : ''}
+            </table>
+          </div>
+          <div style="margin:20px 0 22px 0; font-size:15px; color:#223;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-weight:bold; padding:4px 8px 4px 0; vertical-align:top;">Name:</td>
+                  <td style="padding:4px 0;">${values.name}</td>
+                </tr>
+                <tr>
+                  <td style="font-weight:bold; padding:4px 8px 4px 0; vertical-align:top;">Email:</td>
+                  <td style="padding:4px 0;">${values.email}</td>
+                </tr>
+                <tr>
+                  <td style="font-weight:bold; padding:4px 8px 4px 0; vertical-align:top;">Contact:</td>
+                  <td style="padding:4px 0;">${values.phone}</td>
+                </tr>
+            </table>
+          </div>
+          ${
+            values.userMessage
+              ? `<div style="margin:20px 0;">
+                  <p style="margin:0; font-size:14px; color:#111827;"><strong>User Note:</strong></p>
+                  <div style="font-size:14px; color:#374151; background:#f9fafb; border-radius:8px; padding:12px; border:1px solid #e5e7eb; margin-top:5px;">
+                    ${values.userMessage}
+                  </div>
+                </div>`
+              : ""
+          }
+          <div style="margin:28px 0 0 0; text-align:center;">
+            <a href="${`${config.dashboard_url}/users`}" style="display:inline-block; background:#295ec9; color:#fff; font-size:16px; font-weight:600; padding:12px 32px; border-radius:7px; text-decoration:none; letter-spacing:0.5px;">
+              Review & Process Renewal
+            </a>
+          </div>
+          <p style="margin-top:30px; font-size:13px; color:#9ca3af; text-align:center;">
+            This is an automated request for renewal processed by the membership portal. Please review and take the necessary action.
+          </p>
+        </div>
+      </body>
+      </html>
+    `,
+  };
+  return data;
+};
 
 
 export const emailTemplate = {
@@ -341,4 +426,5 @@ export const emailTemplate = {
   membershipApproved,
   membershipRejected,
   applicationFormAdmin,
+  renewalRequest
 };
