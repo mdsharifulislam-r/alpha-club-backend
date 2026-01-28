@@ -130,6 +130,18 @@ const sendNotificationToUsers = catchAsync(async (req: Request, res: Response) =
 });
 
 
+const approvePendingUser = catchAsync(async (req: Request, res: Response) => {
+  const result = await UserService.approvePendingUser(req.params?.id,req?.body?.status);
+  
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'User approved successfully',
+    data: result,
+  });
+});
+
+
 export const UserController = {
   updateUser,
   createNewUser,
@@ -137,5 +149,6 @@ export const UserController = {
   getProfile,
   getStatistics,
   updateSingleUser,
-  sendNotificationToUsers
+  sendNotificationToUsers,
+  approvePendingUser
 };

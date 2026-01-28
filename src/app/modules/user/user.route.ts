@@ -46,6 +46,8 @@ router
     auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.USER),
     UserController.getStatistics);
 
+router.patch('/approve-pending-users/:id', auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), UserController.approvePendingUser);
+
 
 router.post("/push-notification", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.USER), UserController.sendNotificationToUsers);
 

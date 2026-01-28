@@ -16,10 +16,11 @@ import { Notification } from '../notification/notification.mode';
 import { NotificationCount } from '../notification/notificationCountModel';
 import { USER_ROLES } from '../../../enums/user';
 import admin from '../../../helpers/firebaseConfig';
+import { UserProfileUpdateRequest } from './user.profileUpdateRequest';
 
-
-
-const createUserToDB = async (payload: Partial<IUser>): Promise<{ message: string }> => {
+const createUserToDB = async (
+  payload: Partial<IUser>
+): Promise<{ message: string }> => {
   console.log({ payload });
 
   // Check if user already exists by email
@@ -28,14 +29,16 @@ const createUserToDB = async (payload: Partial<IUser>): Promise<{ message: strin
   }
   const isExistUser = await User.findOne({ email: payload.email });
   if (isExistUser) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, 'User already exists with this email');
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'User already exists with this email'
+    );
   }
 
   // Check password and confirmPassword match
   if (payload.password !== payload.confirmPassword) {
     throw new ApiError(StatusCodes.BAD_REQUEST, 'Passwords do not match');
   }
-
 
   // Create user
   const createUser = await User.create(payload);
@@ -48,7 +51,7 @@ const createUserToDB = async (payload: Partial<IUser>): Promise<{ message: strin
   const value = {
     otp,
     email: createUser.email,
-    name: createUser.name
+    name: createUser.name,
   };
   const verifyAccount = emailTemplate.verifyAccount(value);
   emailHelper.sendEmail(verifyAccount);
@@ -60,9 +63,8 @@ const createUserToDB = async (payload: Partial<IUser>): Promise<{ message: strin
   };
   await User.findByIdAndUpdate(createUser._id, { $set: { authentication } });
 
-  return { message: "User created successfully" };
+  return { message: 'User created successfully' };
 };
-
 
 // const sendNotificationToUsers = async (message: string,fcmToken?:string,  usersId: string[] = []) => {
 //   const users = usersId.length
@@ -74,7 +76,6 @@ const createUserToDB = async (payload: Partial<IUser>): Promise<{ message: strin
 //       status: "active",
 //       role: { $nin: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] },
 //     }) as IUser[];
-
 
 //  for (const user of users) {
 //   // ✅ Use user's own FCM token
@@ -123,29 +124,33 @@ const sendNotificationToUsers = async (
   usersId: string[] = []
 ) => {
   const users = usersId.length
-    ? await User.find({ _id: { $in: usersId }, status: "active" }).select('fcmToken _id role active').lean()
-    : await User.find({
-        status: "active",
-        role: { $nin: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] },
-      }).select('fcmToken _id role active').lean() as IUser[];
+    ? await User.find({ _id: { $in: usersId }, status: 'active' })
+      .select('fcmToken _id role active')
+      .lean()
+    : ((await User.find({
+      status: 'active',
+      role: { $nin: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] },
+    })
+      .select('fcmToken _id role active')
+      .lean()) as IUser[]);
 
-      console.log({users})
+  console.log({ users });
 
   // Push notifications
   await Promise.allSettled(
     users
-      .filter((user) => user.fcmToken)
-      .map((user) =>
+      .filter(user => user.fcmToken)
+      .map(user =>
         admin.messaging().send({
           token: user.fcmToken!,
           notification: {
-            title: "New Notification",
+            title: 'New Notification',
             body: message,
           },
           data: {
             receiver: String(user._id),
-            sender: "system",
-            path: "/notifications",
+            sender: 'system',
+            path: '/notifications',
           },
         })
       )
@@ -153,15 +158,15 @@ const sendNotificationToUsers = async (
 
   // DB operations (with logging)
   await Promise.allSettled(
-    users.map(async (user) => {
+    users.map(async user => {
       try {
         await Notification.create({
           receiver: user._id,
-          title: "New Notification",
+          title: 'New Notification',
           message,
-          refId:user._id,
+          refId: user._id,
           sender: null,
-          path: "/notifications",
+          path: '/notifications',
           seen: false,
         });
 
@@ -171,23 +176,22 @@ const sendNotificationToUsers = async (
           { new: true, upsert: true }
         );
       } catch (err) {
-        console.error("Notification DB error for user:", user._id, err);
+        console.error('Notification DB error for user:', user._id, err);
       }
     })
   );
 };
 
-
-
 const updateUserToDB = async (
   userId: string,
   payload: Partial<IUser>
 ): Promise<IUser | null> => {
-
   const isExistUser = await User.findById(userId);
   if (!isExistUser) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
+
+  console.log('payload', userId, payload);
 
   // unlink old image ONLY if image changed
   if (
@@ -203,29 +207,63 @@ const updateUserToDB = async (
     return isExistUser;
   }
 
-  if (payload?.name) {
-    await MemberShipApplication.findOneAndUpdate(isExistUser.application_form, { name: payload.name })
+
+  if (payload?.fcmToken) {
+    await User.findOneAndUpdate(
+      { _id: userId },
+      { $set: payload },
+      {
+        new: true,
+        runValidators: true,
+        strict: true,
+      }
+    );
+  } else {
+    const updateUserRequest = await UserProfileUpdateRequest.findOneAndUpdate(
+      { user: userId },
+      { $set: payload },
+      {
+        new: true,
+        runValidators: true,
+        strict: true,
+        upsert: true, // 👈 create if not found
+      }
+    );
+
+    // 🔔 Notify all admins
+    const admins = await User.find({
+      role: { $in: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] },
+    });
+
+    for (const admin of admins) {
+      Notification.create({
+        receiver: admin._id,
+        title: "User Profile Update Request",
+        message: `${isExistUser.name || "A user"} submitted a profile update request.`,
+        sender: isExistUser._id,
+        refId: updateUserRequest?._id,
+        path: "/users", // admin page to review requests
+        seen: false,
+      }).catch(() => { });
+
+      // 🔢 Increment notification count
+      NotificationCount.findOneAndUpdate(
+        { user: admin._id },
+        { $inc: { count: 1 } },
+        { new: true, upsert: true }
+      ).catch(() => { });
+    }
+
   }
 
-  const updatedUser = await User.findOneAndUpdate(
-    { _id: userId },
-    { $set: payload },
-    {
-      new: true,
-      runValidators: true,
-      strict: true,
-    }
-  );
-  console.log(updatedUser);
-
-  return updatedUser;
+  return isExistUser;
 };
+
 const updateSingleUserToDB = async (
   userId: string,
   payload: Partial<IUser>
 ): Promise<IUser | null> => {
-
-  console.log("payload", userId, payload);
+  console.log('payload', userId, payload);
 
   const isExistUser = await User.findById(userId);
   if (!isExistUser) {
@@ -261,8 +299,8 @@ const updateSingleUserToDB = async (
 };
 
 
+
 const getAllUsers = async (query: Record<string, any>, userId: string) => {
-  console.log(userId)
   const result = new QueryBuilder(User.find({ _id: { $ne: userId } }), query)
     .paginate()
     .search(userSearchableField)
@@ -270,7 +308,9 @@ const getAllUsers = async (query: Record<string, any>, userId: string) => {
     .filter()
     .sort();
 
-  const data = await result.modelQuery.lean().populate('application_form', 'membershipType');
+  const data = await result.modelQuery
+    .populate('application_form', 'membershipType')
+    .populate('profileUpdateRequest'); // ✅ added
 
   const pagination = await result.getPaginationInfo();
 
@@ -280,20 +320,82 @@ const getAllUsers = async (query: Record<string, any>, userId: string) => {
   };
 };
 
-
 const getProfile = async (userId: string) => {
   const user = await User.findOne({ _id: userId })
     .populate({ path: 'application_form' })
     .lean();
   if (!user) {
-    throw new ApiError(500, "User not found");
+    throw new ApiError(500, 'User not found');
   }
   return user;
 };
 
+const approvePendingUser = async (userId: string, status: string) => {
+  console.log({ userId, status })
+  const updateUserRequest = await UserProfileUpdateRequest.findOne({
+    user: userId,
+    status: 'pending',
+  });
 
+  if (!updateUserRequest) {
+    throw new ApiError(404, 'Profile update request not found');
+  }
 
+  const updatedInfo: Record<string, any> = {};
 
+  if (updateUserRequest.name) {
+    updatedInfo.name = updateUserRequest.name;
+  }
+
+  if (updateUserRequest.profileImage) {
+    updatedInfo.profileImage = updateUserRequest.profileImage;
+  }
+
+  if (status !== 'rejected') {
+    const user = await User.findOneAndUpdate(
+      { _id: userId },
+      { $set: updatedInfo },
+      { new: true }
+    );
+
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    if (updateUserRequest.name) {
+      await MemberShipApplication.findByIdAndUpdate(user.application_form, {
+        name: updateUserRequest.name,
+      });
+    }
+  }
+
+  await UserProfileUpdateRequest.findOneAndDelete({ user: userId });
+
+  if (userId) {
+    const message =
+      status !== 'approved'
+        ? 'Your profile update request has been approved.'
+        : 'Your profile update request has been rejected.';
+
+    Notification.create({
+      receiver: userId,
+      title: 'Profile Update Request',
+      message,
+      sender: null, // system notification
+      refId: updateUserRequest._id,
+      path: '/profile',
+      seen: false,
+    }).catch(() => { });
+
+    // Update notification count
+    NotificationCount.findOneAndUpdate(
+      { user: userId },
+      { $inc: { count: 1 } },
+      { new: true, upsert: true }
+    ).catch(() => { });
+  }
+  return updateUserRequest;
+};
 
 const getStatistics = async (year?: string) => {
   // Get total counts
@@ -330,7 +432,7 @@ const getStatistics = async (year?: string) => {
 
   // Create a map of month number to count
   const monthMap = new Map<number, number>();
-  userStats.forEach((stat) => {
+  userStats.forEach(stat => {
     monthMap.set(stat._id, stat.count);
   });
 
@@ -371,5 +473,6 @@ export const UserService = {
   getProfile,
   getStatistics,
   updateSingleUserToDB,
-  sendNotificationToUsers
+  sendNotificationToUsers,
+  approvePendingUser,
 };

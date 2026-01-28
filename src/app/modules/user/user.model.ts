@@ -55,8 +55,7 @@ const userSchema = new Schema<IUser, UserModal>(
     },
     application_form: {
       type: Schema.Types.ObjectId,
-      ref: 'MemberShipApplication',
-      select: false,
+      ref: 'MemberShipApplication'
     },
     
     authentication: {
@@ -122,11 +121,11 @@ userSchema.pre('save', async function (next) {
 });
 
 
-userSchema.virtual('airlineVerification', {
-  ref: 'AirlinePersonVerification',
+userSchema.virtual('profileUpdateRequest', {
+  ref: 'UserProfileUpdateRequest',
   localField: '_id',
   foreignField: 'user',
-  justOne: true
+  justOne: true,
 });
 
 userSchema.set('toJSON', { virtuals: true });
