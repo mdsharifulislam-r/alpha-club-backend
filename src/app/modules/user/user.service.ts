@@ -156,10 +156,10 @@ const sendNotificationToUsers = async (
       )
   );
 
-  // const success = pushResults.filter(r => {
-  //   console.log({ r });
-  //  return r.status === 'fulfilled'
-  // });
+  const success = pushResults.filter(r => {
+    console.log({ r });
+   return r.status === 'fulfilled'
+  });
   // const failed = pushResults.filter(r => {
   //   console.log( r );
   //   // return r.status === 'rejected'
