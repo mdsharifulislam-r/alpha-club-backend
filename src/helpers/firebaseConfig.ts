@@ -11,10 +11,10 @@ if (!fs.existsSync(serviceAccountPath)) {
   );
 }
 
+console.log('serviceAccountPath', serviceAccountPath);
+
 admin.initializeApp({
-  credential: admin.credential.cert(
-    JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'))
-  ),
+  credential: admin.credential.cert(JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'))),
 });
 
 export default admin;

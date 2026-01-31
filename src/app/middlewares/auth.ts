@@ -4,6 +4,7 @@ import { Secret } from 'jsonwebtoken';
 import config from '../../config';
 import ApiError from '../../errors/ApiError';
 import { jwtHelper } from '../../helpers/jwtHelper';
+import { User } from '../modules/user/user.model';
 
 const auth =
   (...roles: string[]) =>
@@ -24,6 +25,15 @@ const auth =
         );
         //set user to header
         req.user = verifyUser;
+        const isUserBlocked = await User.findById(verifyUser?.id, 'status').lean().exec();    
+        console.log(isUserBlocked)    
+        if (isUserBlocked?.status === 'block') {
+          throw new ApiError(
+            StatusCodes.FORBIDDEN,
+            "You are blocked. Please contact the support team."
+          );
+        }
+        
         //guard user
         if (roles.length && !roles.includes(verifyUser.role)) {
           throw new ApiError(

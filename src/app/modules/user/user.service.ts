@@ -125,19 +125,19 @@ const sendNotificationToUsers = async (
 ) => {
   const users = usersId.length
     ? await User.find({ _id: { $in: usersId }, status: 'active' })
-      .select('fcmToken _id role active')
-      .lean()
+        .select('fcmToken _id role active')
+        .lean()
     : ((await User.find({
-      status: 'active',
-      role: { $nin: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] },
-    })
-      .select('fcmToken _id role active')
-      .lean()) as IUser[]);
+        status: 'active',
+        role: { $nin: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] },
+      })
+        .select('fcmToken _id role active')
+        .lean()) as IUser[]);
 
   console.log({ users });
 
   // Push notifications
-  await Promise.allSettled(
+  const pushResults = await Promise.allSettled(
     users
       .filter(user => user.fcmToken)
       .map(user =>
@@ -155,6 +155,18 @@ const sendNotificationToUsers = async (
         })
       )
   );
+
+  // const success = pushResults.filter(r => {
+  //   console.log({ r });
+  //  return r.status === 'fulfilled'
+  // });
+  // const failed = pushResults.filter(r => {
+  //   console.log( r );
+  //   // return r.status === 'rejected'
+  // });
+
+  // console.log('✅ Push Success:', success.length);
+  // console.log('❌ Push Failed:', failed.length);
 
   // DB operations (with logging)
   await Promise.allSettled(
@@ -207,7 +219,6 @@ const updateUserToDB = async (
     return isExistUser;
   }
 
-
   if (payload?.fcmToken) {
     await User.findOneAndUpdate(
       { _id: userId },
@@ -238,22 +249,23 @@ const updateUserToDB = async (
     for (const admin of admins) {
       Notification.create({
         receiver: admin._id,
-        title: "User Profile Update Request",
-        message: `${isExistUser.name || "A user"} submitted a profile update request.`,
+        title: 'User Profile Update Request',
+        message: `${
+          isExistUser.name || 'A user'
+        } submitted a profile update request.`,
         sender: isExistUser._id,
         refId: updateUserRequest?._id,
-        path: "/users", // admin page to review requests
+        path: '/users', // admin page to review requests
         seen: false,
-      }).catch(() => { });
+      }).catch(() => {});
 
       // 🔢 Increment notification count
       NotificationCount.findOneAndUpdate(
         { user: admin._id },
         { $inc: { count: 1 } },
         { new: true, upsert: true }
-      ).catch(() => { });
+      ).catch(() => {});
     }
-
   }
 
   return isExistUser;
@@ -298,8 +310,6 @@ const updateSingleUserToDB = async (
   return updatedUser;
 };
 
-
-
 const getAllUsers = async (query: Record<string, any>, userId: string) => {
   const result = new QueryBuilder(User.find({ _id: { $ne: userId } }), query)
     .paginate()
@@ -331,7 +341,7 @@ const getProfile = async (userId: string) => {
 };
 
 const approvePendingUser = async (userId: string, status: string) => {
-  console.log({ userId, status })
+  console.log({ userId, status });
   const updateUserRequest = await UserProfileUpdateRequest.findOne({
     user: userId,
     status: 'pending',
@@ -385,14 +395,14 @@ const approvePendingUser = async (userId: string, status: string) => {
       refId: updateUserRequest._id,
       path: '/profile',
       seen: false,
-    }).catch(() => { });
+    }).catch(() => {});
 
     // Update notification count
     NotificationCount.findOneAndUpdate(
       { user: userId },
       { $inc: { count: 1 } },
       { new: true, upsert: true }
-    ).catch(() => { });
+    ).catch(() => {});
   }
   return updateUserRequest;
 };
