@@ -84,17 +84,63 @@ const getByIdFromDB = async (id: string) => {
   };
 };
 
-const updateInDB = async (id: string, payload: Partial<IStory>) => {
+const updateInDB = async (
+  id: string,
+  payload: Partial<IStory> & { removedFiles?: string[] }
+) => {
+  // 1️⃣ Get existing images
+  const existing = await Story.findById(id).select('image').lean();
+
+  let existingImages: string[] = Array.isArray(existing?.image)
+    ? existing.image.map(String)
+    : [];
+
+  // 2️⃣ Handle removedFiles
+  if (Array.isArray(payload.removedFiles) && payload.removedFiles.length > 0) {
+    const removedFilesSet = new Set(payload.removedFiles.map(String));
+    existingImages = existingImages.filter(
+      img => !removedFilesSet.has(img)
+    );
+  }
+
+  // 3️⃣ Handle image update logic
+  if (Object.prototype.hasOwnProperty.call(payload, 'image')) {
+    let newImages: string[] = [];
+
+    if (Array.isArray(payload.image)) {
+      newImages = payload.image.map(String).filter(Boolean);
+    } else if (payload.image) {
+      newImages = [String(payload.image)];
+    }
+
+    if (newImages.length > 0) {
+      payload.image = Array.from(
+        new Set([...existingImages, ...newImages])
+      );
+    } else {
+      payload.image = existingImages;
+    }
+  } else if (payload.removedFiles?.length) {
+    // Only removedFiles sent
+    payload.image = existingImages;
+  }
+
+  // 4️⃣ Clean payload
+  delete (payload as any).removedFiles;
+
+  // 5️⃣ Update DB
   const updated = await Story.findByIdAndUpdate(id, payload, {
     new: true,
     runValidators: true,
-  })
+  }).lean();
 
   if (!updated) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Story not found');
   }
+
   return updated;
 };
+
 
 const deleteFromDB = async (id: string) => {
   const story = await Story.findById(id).lean();
