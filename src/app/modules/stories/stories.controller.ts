@@ -47,7 +47,7 @@ const getById = catchAsync(async (req: Request, res: Response) => {
 
 const update = catchAsync(async (req: Request, res: Response) => {
   const id = req?.params?.id;
-  const image = getSingleFilePath(req.files, 'image');
+  const image = getMultipleFilesPath(req.files, 'image');
 
   const data = {
     ...req.body,
