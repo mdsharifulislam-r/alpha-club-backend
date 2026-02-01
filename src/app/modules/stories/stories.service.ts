@@ -89,8 +89,6 @@ const updateInDB = async (id: string, payload: Partial<IStory>) => {
     new: true,
     runValidators: true,
   })
-    .populate('club')
-    .lean();
 
   if (!updated) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Story not found');
