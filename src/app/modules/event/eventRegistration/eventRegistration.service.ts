@@ -143,83 +143,99 @@ const getByIdFromDB = async (id: string) => {
 };
 
 const updateInDB = async (id: string, payload: Partial<IEventRegistration>) => {
+  // 1️⃣ Update the registration
   const updated = await EventRegistration.findByIdAndUpdate(id, payload, {
     new: true,
     runValidators: true,
   }).lean();
 
-  const existUser = await User.findOne({ _id: payload.user });
+  if (!updated) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "Event registration not found");
+  }
 
-  if (updated?.status === EventRegistrationStatus.CONFIRMED) {
+  // 2️⃣ Get the user who registered
+  const existUser = await User.findById(updated.user).lean();
 
-    if (existUser?.fcmToken) {
+  if (!existUser) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
+  }
+
+  const receiverId = updated.user;
+
+  // 3️⃣ Handle CONFIRMED
+  if (updated.status === EventRegistrationStatus.CONFIRMED) {
+    // Send FCM if token exists
+    if (existUser.fcmToken) {
       admin.messaging().send({
-        token: existUser.fcmToken!,
+        token: existUser.fcmToken,
         notification: {
-          title: 'Event Registration Confirmed',
-          body: 'Your event registration has been confirmed',
+          title: "Event Registration Confirmed",
+          body: "Your event registration has been confirmed",
         },
         data: {
-          receiver: String(payload.user),
-          sender: 'system',
-          path: '/event-registration',
+          receiver: String(receiverId),
+          sender: "system",
+          path: "/event-registration",
         },
-      })
+      });
     }
-    Notification.create({
-      receiver: payload.user,
-      title: 'Event Registration Confirmed',
-      message: 'Your event registration has been confirmed',
+
+    // Create notification
+    await Notification.create({
+      receiver: receiverId,
+      title: "Event Registration Confirmed",
+      message: "Your event registration has been confirmed",
       refId: updated._id,
       sender: null,
-      path: '/event-registration',
+      path: "/event-registration",
       seen: false,
     });
 
-    NotificationCount.findOneAndUpdate(
-      { user: payload.user },
+    // Increment notification count
+    await NotificationCount.findOneAndUpdate(
+      { user: receiverId },
       { $inc: { count: 1 } },
       { new: true, upsert: true }
     );
-  } else if (updated?.status === EventRegistrationStatus.CANCELLED) {
+  }
 
-    if (existUser?.fcmToken) {
+  // 4️⃣ Handle CANCELLED
+  else if (updated.status === EventRegistrationStatus.CANCELLED) {
+    // Send FCM if token exists
+    if (existUser.fcmToken) {
       admin.messaging().send({
-        token: existUser.fcmToken!,
+        token: existUser.fcmToken,
         notification: {
-          title: 'Event Registration Cancelled',
-          body: 'Your event registration has been cancelled',
+          title: "Event Registration Cancelled",
+          body: "Your event registration has been cancelled",
         },
         data: {
-          receiver: String(payload.user),
-          sender: 'system',
-          path: '/event-registration',
+          receiver: String(receiverId),
+          sender: "system",
+          path: "/event-registration",
         },
-      })
+      });
     }
-    Notification.create({
-      receiver: payload.user,
-      title: 'Event Registration Cancelled',
-      message: 'Your event registration has been cancelled',
+
+    // Create notification
+    await Notification.create({
+      receiver: receiverId,
+      title: "Event Registration Cancelled",
+      message: "Your event registration has been cancelled",
       refId: updated._id,
       sender: null,
-      path: '/event-registration',
+      path: "/event-registration",
       seen: false,
     });
 
-    Notification.deleteOne({
-      deleteReferenceId: updated._id,
-    });
-    NotificationCount.findOneAndUpdate(
-      { user: updated.user },
+    // Decrement notification count
+    await NotificationCount.findOneAndUpdate(
+      { user: receiverId },
       { $inc: { count: -1 } },
       { new: true, upsert: true }
     );
   }
 
-  if (!updated) {
-    throw new ApiError(StatusCodes.NOT_FOUND, 'Event registration not found');
-  }
   return updated;
 };
 
