@@ -122,8 +122,6 @@ const verifyResetOtp = async (payload: { email: string, oneTimeCode: number }) =
     throw new ApiError(StatusCodes.BAD_REQUEST, 'OTP not found or not requested');
   }
   
-  console.log(payload)
-
   // Check OTP match
   if (registedUser.authentication.oneTimeCode !== Number(oneTimeCode)) {
     throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid OTP');

@@ -54,8 +54,6 @@ const update = catchAsync(async (req: Request, res: Response) => {
     ...req.body,
     ...(image && { image }),
   };
-
-  console.log('why',data)
   
   const result = await ExclusiveOfferService.updateInDB(id, data);
   

@@ -14,7 +14,6 @@ const create = catchAsync(async (req: Request, res: Response) => {
     ...(image && { image }),
   };
 
-  console.log(data)
   const result = await SponsorService.createToDB(data);
   
   sendResponse(res, {

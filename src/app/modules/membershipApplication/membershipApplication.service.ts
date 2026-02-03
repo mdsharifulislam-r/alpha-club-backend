@@ -281,7 +281,6 @@ const updateInDB = async (
     );
   }
 
-  console.log('application', application);
 
   const previousStatus = application.membershipStatus;
   const newStatus = payload.membershipStatus;
@@ -295,7 +294,6 @@ const updateInDB = async (
       $or: [{ email: application.email }, { phone: application.phone }],
     });
 
-    console.log({ application });
 
     if (existingUser) {
       await User.findByIdAndUpdate(existingUser._id, {

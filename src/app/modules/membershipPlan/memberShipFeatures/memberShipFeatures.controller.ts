@@ -58,7 +58,6 @@ const update = catchAsync(async (req: Request, res: Response) => {
   const id = req?.params?.id;
   let image = getSingleFilePath(req.files, 'image');
 
-   console.log(req.body)
   const data: any = {
     ...req.body,
   };

@@ -138,7 +138,6 @@ const deleteFromDB = async (type: string) => {
 
 const featureComparison = async () => {
 
-  console.log({ called: 'ok' })
   // Get all plans with their features and titles
   const plans = await MemberShipPlan.find({})
     .populate({

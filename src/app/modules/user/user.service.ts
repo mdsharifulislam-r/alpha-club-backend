@@ -21,7 +21,6 @@ import { UserProfileUpdateRequest } from './user.profileUpdateRequest';
 const createUserToDB = async (
   payload: Partial<IUser>
 ): Promise<{ message: string }> => {
-  console.log({ payload });
 
   // Check if user already exists by email
   if (!payload.email) {
@@ -134,7 +133,6 @@ const sendNotificationToUsers = async (
         .select('fcmToken _id role active')
         .lean()) as IUser[]);
 
-  console.log({ users });
 
   // Push notifications
   const pushResults = await Promise.allSettled(
@@ -156,10 +154,10 @@ const sendNotificationToUsers = async (
       )
   );
 
-  const success = pushResults.filter(r => {
-    console.log({ r });
-   return r.status === 'fulfilled'
-  });
+  // const success = pushResults.filter(r => {
+  //   console.log({ r });
+  //  return r.status === 'fulfilled'
+  // });
   // const failed = pushResults.filter(r => {
   //   console.log( r );
   //   // return r.status === 'rejected'
@@ -202,8 +200,6 @@ const updateUserToDB = async (
   if (!isExistUser) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
-
-  console.log('payload', userId, payload);
 
   // unlink old image ONLY if image changed
   if (
@@ -275,7 +271,6 @@ const updateSingleUserToDB = async (
   userId: string,
   payload: Partial<IUser>
 ): Promise<IUser | null> => {
-  console.log('payload', userId, payload);
 
   const isExistUser = await User.findById(userId);
   if (!isExistUser) {
@@ -305,7 +300,6 @@ const updateSingleUserToDB = async (
       strict: true,
     }
   );
-  console.log(updatedUser);
 
   return updatedUser;
 };
@@ -341,7 +335,6 @@ const getProfile = async (userId: string) => {
 };
 
 const approvePendingUser = async (userId: string, status: string) => {
-  console.log({ userId, status });
   const updateUserRequest = await UserProfileUpdateRequest.findOne({
     user: userId,
     status: 'pending',

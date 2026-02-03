@@ -9,6 +9,7 @@ import { USER_ROLES } from '../../../../enums/user';
 import { User } from '../../user/user.model';
 import { Notification } from '../../notification/notification.mode';
 import { NotificationCount } from '../../notification/notificationCountModel';
+import admin from '../../../../helpers/firebaseConfig';
 
 const createToDB = async (payload: IEventRegistration) => {
   // Check if event exists
@@ -41,13 +42,13 @@ const createToDB = async (payload: IEventRegistration) => {
         refId: registration._id,
         path: "/event-registration",
         seen: false,
-      }).catch(() => {});
+      }).catch(() => { });
       // 🔢 Notification count
       NotificationCount.findOneAndUpdate(
         { user: admin._id },
         { $inc: { count: 1 } },
         { new: true, upsert: true }
-      ).catch(() => {});
+      ).catch(() => { });
     }
   } catch (e) {
     // Swallow notification errors
@@ -75,13 +76,13 @@ const cancelEvent = async ({ event, user }: { event: string; user: string }) => 
       // Remove notification for this registration
       Notification.deleteOne({
         deleteReferenceId: registration._id,
-      }).catch(() => {});
+      }).catch(() => { });
       // 🔻 Decrement notification count
-       NotificationCount.findOneAndUpdate(
+      NotificationCount.findOneAndUpdate(
         { user: admin._id },
         { $inc: { count: -1 } },
         { new: true }
-      ).catch(() => {});
+      ).catch(() => { });
     }
   } catch (e) {
     // Ignore notification errors
@@ -146,6 +147,75 @@ const updateInDB = async (id: string, payload: Partial<IEventRegistration>) => {
     new: true,
     runValidators: true,
   }).lean();
+
+  const existUser = await User.findOne({ _id: payload.user });
+
+  if (updated?.status === EventRegistrationStatus.CONFIRMED) {
+
+    if (existUser?.fcmToken) {
+      admin.messaging().send({
+        token: existUser.fcmToken!,
+        notification: {
+          title: 'Event Registration Confirmed',
+          body: 'Your event registration has been confirmed',
+        },
+        data: {
+          receiver: String(payload.user),
+          sender: 'system',
+          path: '/event-registration',
+        },
+      })
+    }
+    Notification.create({
+      receiver: payload.user,
+      title: 'Event Registration Confirmed',
+      message: 'Your event registration has been confirmed',
+      refId: updated._id,
+      sender: null,
+      path: '/event-registration',
+      seen: false,
+    });
+
+    NotificationCount.findOneAndUpdate(
+      { user: payload.user },
+      { $inc: { count: 1 } },
+      { new: true, upsert: true }
+    );
+  } else if (updated?.status === EventRegistrationStatus.CANCELLED) {
+
+    if (existUser?.fcmToken) {
+      admin.messaging().send({
+        token: existUser.fcmToken!,
+        notification: {
+          title: 'Event Registration Cancelled',
+          body: 'Your event registration has been cancelled',
+        },
+        data: {
+          receiver: String(payload.user),
+          sender: 'system',
+          path: '/event-registration',
+        },
+      })
+    }
+    Notification.create({
+      receiver: payload.user,
+      title: 'Event Registration Cancelled',
+      message: 'Your event registration has been cancelled',
+      refId: updated._id,
+      sender: null,
+      path: '/event-registration',
+      seen: false,
+    });
+
+    Notification.deleteOne({
+      deleteReferenceId: updated._id,
+    });
+    NotificationCount.findOneAndUpdate(
+      { user: updated.user },
+      { $inc: { count: -1 } },
+      { new: true, upsert: true }
+    );
+  }
 
   if (!updated) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Event registration not found');

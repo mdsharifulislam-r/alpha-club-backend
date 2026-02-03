@@ -10,7 +10,6 @@ const createToDB = async (payload: IClub) => {
   if (payload?.limitOfMember)
     payload.limitOfMember = Number(payload.limitOfMember);
 
-  console.log(payload);
   return await Club.create(payload);
 };
 

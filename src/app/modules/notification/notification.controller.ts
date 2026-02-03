@@ -44,7 +44,6 @@ const notificationUnreadCount = catchAsync(async (req: Request, res: Response) =
 
 const updateNotificationCount = catchAsync(async (req: Request, res: Response) => {
   // This is a placeholder implementation. You should implement the logic here as per your application's requirements.
-  console.log('user-->',req?.user)
   const result = await NotificationService.updateNotificationCount(req?.user?.id);
 
   sendResponse(res, {
@@ -55,9 +54,24 @@ const updateNotificationCount = catchAsync(async (req: Request, res: Response) =
   });
 });
 
+
+const deleteNotification = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  const { id } = req.params;
+  const result = await NotificationService.deleteNotification(userId, id);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'Notification deleted successfully',
+    data: result,
+  });
+});
+
 export const NotificationController = {
   getMyNotifications,
   markAsSeen,
   notificationUnreadCount,
   updateNotificationCount,
+  deleteNotification
 };

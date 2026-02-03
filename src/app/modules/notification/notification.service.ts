@@ -28,7 +28,6 @@ const getMyNotifications = async (userId: string, query: Record<string, any>) =>
 };
 
 const markAsSeen = async (userId: string, notificationId: string) => {
-    console.log({notificationId})
   const notification = await Notification.findByIdAndUpdate(
     notificationId,
     { seen: true },
@@ -57,7 +56,6 @@ const notificationUnreadCount = async (userId: string) => {
 };
 
 const updateNotificationCount = async (userId: string) => {
-    console.log('clear',userId)
   const notification = await NotificationCount.findOneAndUpdate(
     { user: userId },
     { count: 0 },
@@ -70,9 +68,20 @@ const updateNotificationCount = async (userId: string) => {
   return notification;
 };
 
+
+
+const deleteNotification = async (userId: string, notificationId: string) => {
+  const notification = await Notification.findByIdAndDelete(notificationId);
+  if (!notification) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Notification not found or access denied');
+  }
+  return notification;
+};
+
 export const NotificationService = {
   getMyNotifications,
   markAsSeen,
   notificationUnreadCount,
-  updateNotificationCount
+  updateNotificationCount,
+  deleteNotification
 };

@@ -26,7 +26,6 @@ const auth =
         //set user to header
         req.user = verifyUser;
         const isUserBlocked = await User.findById(verifyUser?.id, 'status').lean().exec();    
-        console.log(isUserBlocked)    
         if (isUserBlocked?.status === 'block') {
           throw new ApiError(
             StatusCodes.FORBIDDEN,

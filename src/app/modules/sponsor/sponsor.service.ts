@@ -59,7 +59,6 @@ const updateInDB = async (id: string, payload: Partial<ISponsor>) => {
     }
   }
 
-   console.log(payload)
   const updated = await Sponsor.findByIdAndUpdate(id, payload, {
     new: true,
   }).lean();

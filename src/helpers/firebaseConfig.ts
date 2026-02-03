@@ -11,7 +11,6 @@ if (!fs.existsSync(serviceAccountPath)) {
   );
 }
 
-console.log('serviceAccountPath--', JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8')));
 
 admin.initializeApp({
   credential: admin.credential.cert(JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'))),
