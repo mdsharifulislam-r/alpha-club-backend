@@ -23,6 +23,10 @@ const faqContactSchema = new Schema<IContactForm, ContactFormModel>(
             type: String,
             trim: true,
         },
+        memberShipId: {
+            type: String,
+            trim: true,
+        },
     },
     { timestamps: true }
 );

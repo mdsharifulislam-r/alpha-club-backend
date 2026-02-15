@@ -4,6 +4,7 @@ import auth from '../../middlewares/auth';
 import { USER_ROLES } from '../../../enums/user';
 import { MemberShipApplicationValidation } from './membershipApplication.validation';
 import { MemberShipApplicationController } from './membershipApplication.controller';
+import fileUploadHandler from '../../middlewares/fileUploadHandler';
 
 const router = express.Router();
 
@@ -18,6 +19,10 @@ router
     auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
     MemberShipApplicationController.getAll
   );
+
+router.post('/crate-from',
+   fileUploadHandler(),
+  MemberShipApplicationController.createFrom);
 
 router
   .route('/:id')

@@ -19,6 +19,21 @@ const create = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const createForm = catchAsync(async (req: Request, res: Response) => {
+  const data = {
+    ...req.body,
+  };
+
+  const result = await ContactFormService.createFormToDB(data);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.CREATED,
+    message: 'Contact form created successfully',
+    data: result,
+  });
+});
+
 const getAll = catchAsync(async (req: Request, res: Response) => {
   const result = await ContactFormService.getAllFromDB(req.query);
 
@@ -71,6 +86,7 @@ const remove = catchAsync(async (req: Request, res: Response) => {
 
 export const ContactFormController = {
   create,
+  createForm,
   getAll,
   getById,
   update,

@@ -176,6 +176,117 @@ const createToDB = async (payload: IContactForm) => {
 };
 
 
+const createFormToDB = async (payload: IContactForm) => {
+  // 🔴 Check email duplicate in ContactForm
+  console.log(payload);
+  const emailExists = await ContactForm.findOne({
+    email: payload.email,
+  });
+
+  if (emailExists && payload.membershipType) {
+    throw new ApiError(
+      StatusCodes.CONFLICT,
+      "Application already exists with this email"
+    );
+  }
+
+  // 🔴 Check phone duplicate in ContactForm
+  const phoneExists = await ContactForm.findOne({
+    contact: payload.contact,
+  });
+
+  if (phoneExists && payload.membershipType) {
+    throw new ApiError(
+      StatusCodes.CONFLICT,
+      "Application already exists with this phone number"
+    );
+  }
+
+  // 🔴 Check email duplicate in Membership Application
+  if (payload.membershipType) {
+    const emailExistsInApplication =
+      await MemberShipApplication.findOne({
+        email: payload.email,
+      });
+
+    if (emailExistsInApplication && payload.membershipType) {
+      throw new ApiError(
+        StatusCodes.CONFLICT,
+        "Membership application already exists with this email"
+      );
+    }
+
+    const phoneExistsInApplication =
+      await MemberShipApplication.findOne({
+        phone: payload.contact,
+      });
+
+    if (phoneExistsInApplication && payload.membershipType) {
+      throw new ApiError(
+        StatusCodes.CONFLICT,
+        "Membership application already exists with this phone number"
+      );
+    }
+  }
+
+  // ✅ Save Contact Form
+  await ContactForm.create(payload);
+
+  // ✅ Save Membership Application
+  if (payload.membershipType) {
+    const expireDate = new Date();
+    expireDate.setFullYear(expireDate.getFullYear() + 4);
+
+    await MemberShipApplication.create({
+      name: payload.name,
+      phone: payload.contact,
+      email: payload.email,
+      membershipType: payload.membershipType,
+      expireId: expireDate,
+    });
+  }
+
+  // 🔔 Notify Admins
+  const adminOrSuperAdminUsers = await User.find({
+    role: { $in: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] },
+  });
+
+  for (const admin of adminOrSuperAdminUsers) {
+    // 📧 Email
+    if (admin.email) {
+      const emailPayload = {
+        userName: payload.name,
+        userEmail: payload.email,
+        userContact: payload.contact,
+        userMessage: payload.message ?? "",
+        adminEmail: admin.email,
+        membershipType: payload.membershipType
+      };
+
+      const sendEmail =
+        emailTemplate.applicationFormAdmin(emailPayload);
+      emailHelper.sendEmail(sendEmail);
+    }
+
+    // 🔔 Notification
+    Notification.create({
+      receiver: admin._id,
+      title: "New Membership Application Submitted",
+      message: payload.message ?? "",
+      sender: null,
+      refId: admin._id,
+      path: "/user/contact-from",
+      seen: false,
+    }).catch(() => {});
+
+    // 🔢 Notification count
+    NotificationCount.findOneAndUpdate(
+      { user: admin._id },
+      { $inc: { count: 1 } },
+      { new: true, upsert: true }
+    ).catch(() => {});
+  }
+};
 
 const getAllFromDB = async (query: Record<string, any>) => {
   const qb = new QueryBuilder(
@@ -233,6 +344,7 @@ const deleteFromDB = async (id: string) => {
 
 export const ContactFormService = {
   createToDB,
+  createFormToDB,
   getAllFromDB,
   getByIdFromDB,
   updateInDB,

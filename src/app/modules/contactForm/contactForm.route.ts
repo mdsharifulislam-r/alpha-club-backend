@@ -12,6 +12,8 @@ router
   .get(ContactFormController.getAll);
 
 // Operations for a specific contact form by id
+
+router.post('/create-form', ContactFormController.createForm);
 router
   .route('/:id')
   .get(    ContactFormController.getById)

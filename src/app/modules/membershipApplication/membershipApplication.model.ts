@@ -52,10 +52,6 @@ const memberShipApplicationSchema = new Schema<IMemberShipApplication, MemberShi
       required: true,
       trim: true,
     },
-    image: {
-      type: String,
-      default: 'https://i.ibb.co/z5YHLV9/profile.png',
-    },
     address: {
       type: String,
       trim: true,
@@ -70,6 +66,24 @@ const memberShipApplicationSchema = new Schema<IMemberShipApplication, MemberShi
     expireId: {
       type: Date,
     },
+    // Extra 
+    jobTitle: { type: String },
+    organizationName: { type: String },
+    dateOfBirth: { type: Date },
+    nationality: { type: String },
+    countryOfResidence: { type: String },
+    residenceAddress: { type: String },
+    industrySector: { type: String },
+    yearsOfExperience: { type: Number },
+    currentEmployer: { type: String },
+    workLocation: { type: String },
+    annualGrossSalary: { type: Number },
+    benefitsAndLifestyleInterests: { type: [String] }, // Array of strings
+    image: { type: String },
+    logo: { type: String },
+    confirmAcknowledgement: { type: Boolean },
+    confirmAgreement: { type: Boolean },
+
   },
   { timestamps: true }
 );

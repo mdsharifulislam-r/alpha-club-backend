@@ -10,7 +10,6 @@ export type IMemberShipApplication = {
   email: string;
   phone: string;
   address?: string;
-  image?:string;
   familyMembers?: Array<{
     name: string;
     email: string;
@@ -19,6 +18,24 @@ export type IMemberShipApplication = {
 
   membershipStatus: MembershipStatus;
   expireId?: Date;   // new field for separate expiry date
+  
+  // Extra fields
+  jobTitle?: string;
+  organizationName?: string;
+  dateOfBirth?: Date;
+  nationality?: string;
+  countryOfResidence?: string;
+  residenceAddress?: string;
+  industrySector?: string;
+  yearsOfExperience?: number;
+  currentEmployer?: string;
+  workLocation?: string;
+  annualGrossSalary?: number;
+  benefitsAndLifestyleInterests?: string[];
+  image?: string;
+  logo?: string;
+  confirmAcknowledgement?: boolean;
+  confirmAgreement?: boolean;
 
   createdAt?: Date;
   updatedAt?: Date;

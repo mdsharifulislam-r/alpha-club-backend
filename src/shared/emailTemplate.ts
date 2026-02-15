@@ -287,6 +287,7 @@ interface IApplicationFormAdminValues {
   userContact: string;
   userMessage: string;
   adminEmail: string;  // admin email, for admin notification
+  membershipType?: string;
 }
 
 
@@ -301,7 +302,7 @@ const applicationFormAdmin = (values: IApplicationFormAdminValues) => {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>New Membership Application Request</title>
+        <title>${values.membershipType ? 'New Membership Application Request' :'New Contract Application Request'}</title>
       </head>
       <body style="font-family: 'Inter', Arial, sans-serif; background: #f6f8fb; margin: 0; padding: 0;">
         <div style="max-width: 490px; margin: 40px auto; background: #ffffff; border-radius: 18px; padding: 38px 28px 34px 28px; box-shadow: 0 8px 26px rgba(20,34,58,0.09);">
