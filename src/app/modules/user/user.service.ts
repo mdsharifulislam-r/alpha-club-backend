@@ -154,18 +154,6 @@ const sendNotificationToUsers = async (
       )
   );
 
-  // const success = pushResults.filter(r => {
-  //   console.log({ r });
-  //  return r.status === 'fulfilled'
-  // });
-  // const failed = pushResults.filter(r => {
-  //   console.log( r );
-  //   // return r.status === 'rejected'
-  // });
-
-  // console.log('✅ Push Success:', success.length);
-  // console.log('❌ Push Failed:', failed.length);
-
   // DB operations (with logging)
   await Promise.allSettled(
     users.map(async user => {

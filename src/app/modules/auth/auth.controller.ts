@@ -65,6 +65,18 @@ const adminLoginUser = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const partnerLoginUser = catchAsync(async (req: Request, res: Response) => {
+  const { ...loginData } = req.body;
+  const result = await AuthService.partnerloginUserFromDB(loginData , res);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'Partner logged in successfully.',
+    data: { token: result.createToken },
+  });
+})
+
 const forgetPassword = catchAsync(async (req: Request, res: Response) => {
   const email = req.body.email;
   await AuthService.forgetPasswordToDB(email);
@@ -115,6 +127,7 @@ export const AuthController = {
   verifyOtp,
   verifyResetOtp,
   loginUser,
+  partnerLoginUser,
   forgetPassword,
   resetPassword,
   resendOTPtoDB,

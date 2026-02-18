@@ -421,11 +421,148 @@ const renewalRequest = (values: { name: string; email: string; phone: string; ad
 };
 
 
+export const partnerApproved = (values: {
+  email: string;
+  companyName: string;
+  partnerShipId: string;
+  contactName: string;
+  password: string;
+}) => {
+  const data = {
+    to: values.email,
+    subject: 'Your Partnership Has Been Approved 🎉',
+    html: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Partnership Approved</title>
+</head>
+<body style="font-family: 'Inter', Arial, sans-serif; background: #f6f8fb; margin: 0; padding: 0;">
+  <div style="max-width: 470px; margin: 40px auto; background: #ffffff; border-radius: 18px; padding: 38px 28px 34px 28px; box-shadow: 0 8px 26px rgba(20,34,58,0.09); text-align: center;">
+
+    <!-- Title -->
+    <h1 style="color: #194376; font-size: 24px; font-weight: 700; margin: 0 0 20px 0;">
+      🎉 Partnership Approved!
+    </h1>
+
+    <!-- Greeting -->
+    <p style="color: #33394d; font-size: 15px; margin: 0 0 20px 0; line-height: 1.7;">
+      Hi <strong style="color: #194376;">${values.contactName.split(' ')[0]}</strong>,
+    </p>
+
+    <!-- Message -->
+    <p style="color: #4a5874; font-size: 15px; margin: 0 0 24px 0; line-height: 1.7;">
+      Great news! Your partnership application for 
+      <strong>${values.companyName}</strong> has been approved.
+      <br />
+      You can now access your partner dashboard and resources.
+    </p>
+
+    <!-- Login Credentials -->
+    <div style="background: #f1f5fa; border-radius: 12px; padding: 18px; margin-bottom: 22px; border: 1px solid #e3eafa; text-align: left;">
+      <p style="color: #74839b; font-size: 13px; margin: 0 0 8px 0;">Login Details</p>
+      <p style="margin: 0 0 6px 0; font-size: 14px; color: #333;">
+        <strong>Email:</strong> ${values.email}
+      </p>
+      <p style="margin: 0; font-size: 14px; color: #333;">
+        <strong>Password:</strong> ${values.password}
+      </p>
+    </div>
+
+    <!-- Partner ID -->
+    <div style="background: #f1f5fa; border-radius: 12px; padding: 18px 0 14px 0; margin-bottom: 22px; border: 1px solid #e3eafa;">
+      <p style="color: #74839b; font-size: 13px; margin: 0 0 5px 0;">Partner ID</p>
+      <p style="color: #295ec9; font-size: 18px; font-weight: 600; margin: 0;">
+        ${values.partnerShipId}
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <p style="font-size: 14px; color: #5071b6; margin: 22px 0 0 0; line-height: 1.7;">
+      👉 Please log in and change your password after your first login for security purposes.
+    </p>
+
+    <p style="font-size: 12px; color: #a8b3c5; margin: 22px 0 0 0; line-height: 1.6;">
+      If you need help, feel free to contact our support team.<br />
+      <span style="color:#194376;">Welcome — we’re happy to have you with us!</span>
+    </p>
+
+  </div>
+</body>
+</html>
+`,
+  };
+
+  return data;
+};
+
+
+
+export const partnerRejected = (values: {
+  email: string;
+  companyName: string;
+  contactName: string;
+}) => {
+  const data = {
+    to: values.email,
+    subject: 'Your Partnership Application Has Been Rejected ❌',
+    html: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Partnership Rejected</title>
+</head>
+<body style="font-family: 'Inter', Arial, sans-serif; background: #f6f8fb; margin: 0; padding: 0;">
+  <div style="max-width: 470px; margin: 40px auto; background: #ffffff; border-radius: 18px; padding: 38px 28px 34px 28px; box-shadow: 0 8px 26px rgba(20,34,58,0.09); text-align: center;">
+
+    <!-- Title -->
+    <h1 style="color: #c9302c; font-size: 24px; font-weight: 700; margin: 0 0 20px 0;">
+      ❌ Partnership Rejected
+    </h1>
+
+    <!-- Greeting -->
+    <p style="color: #33394d; font-size: 15px; margin: 0 0 20px 0; line-height: 1.7;">
+      Hi <strong style="color: #c9302c;">${values.contactName.split(' ')[0]}</strong>,
+    </p>
+
+    <!-- Message -->
+    <p style="color: #4a5874; font-size: 15px; margin: 0 0 28px 0; line-height: 1.7;">
+      We regret to inform you that your partnership application for <strong>${values.companyName}</strong> has been rejected.<br />
+      Please feel free to contact our support team if you have any questions or need further clarification.
+    </p>
+
+    <!-- Support Note -->
+    <p style="font-size: 14px; color: #5071b6; margin: 22px 0 0 0; line-height: 1.7;">
+      You can reach out at any time for guidance on reapplying or exploring other opportunities with us.
+    </p>
+
+    <!-- Footer -->
+    <p style="font-size: 12px; color: #a8b3c5; margin: 22px 0 0 0; line-height: 1.6;">
+      Thank you for your interest in partnering with us.<br />
+      <span style="color:#194376;">We wish you the best in your future endeavors.</span>
+    </p>
+
+  </div>
+</body>
+</html>
+`,
+  };
+
+  return data;
+};
+
+
 export const emailTemplate = {
   resetPassWord,
   verifyAccount,
   membershipApproved,
   membershipRejected,
   applicationFormAdmin,
-  renewalRequest
+  renewalRequest,
+  partnerApproved,
+  partnerRejected
 };

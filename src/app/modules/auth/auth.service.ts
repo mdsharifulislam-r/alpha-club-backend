@@ -16,6 +16,7 @@ import generateOTP from '../../../util/generateOTP';
 import { IUser } from '../user/user.interface';
 import { USER_ROLES } from '../../../enums/user';
 import { IMemberShipApplication } from '../membershipApplication/membershipApplication.interface';
+import { Response } from 'express';
 
 
 //resend otp
@@ -121,7 +122,7 @@ const verifyResetOtp = async (payload: { email: string, oneTimeCode: number }) =
   if (!registedUser?.authentication?.oneTimeCode) {
     throw new ApiError(StatusCodes.BAD_REQUEST, 'OTP not found or not requested');
   }
-  
+
   // Check OTP match
   if (registedUser.authentication.oneTimeCode !== Number(oneTimeCode)) {
     throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid OTP');
@@ -195,43 +196,43 @@ const loginUserFromDB = async (payload: ILoginData) => {
     );
 
   }
-  
-// const loginUserFromDB = async (payload: ILoginData) => {
-//   const { email, password } = payload;
-//   const isExistUser = await User.findOne({ email }).select('+password');
 
-//   if (!isExistUser) {
-//     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
-//   }
+  // const loginUserFromDB = async (payload: ILoginData) => {
+  //   const { email, password } = payload;
+  //   const isExistUser = await User.findOne({ email }).select('+password');
 
-//   //check verified and status
-//   if (!isExistUser.verified) {
+  //   if (!isExistUser) {
+  //     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  //   }
 
-
-//     // Send verification email
-//     const otp = generateOTP();
-//     const value = {
-//       otp,
-//       email: isExistUser?.email,
-//       name: isExistUser?.name
-//     };
-//     const verifyAccount = emailTemplate.verifyAccount(value);
-//     emailHelper.sendEmail(verifyAccount);
-
-//     // Save OTP and expiry to DB
-//     const authentication = {
-//       oneTimeCode: otp,
-//       expireAt: new Date(Date.now() + 3 * 60000),
-//     };
-//     await User.findByIdAndUpdate(isExistUser._id, { $set: { authentication } });
-
-//     throw new ApiError(
-//       StatusCodes.FORBIDDEN,
-//       'Please verify your account, then try to login again'
-//     );
+  //   //check verified and status
+  //   if (!isExistUser.verified) {
 
 
-//   }
+  //     // Send verification email
+  //     const otp = generateOTP();
+  //     const value = {
+  //       otp,
+  //       email: isExistUser?.email,
+  //       name: isExistUser?.name
+  //     };
+  //     const verifyAccount = emailTemplate.verifyAccount(value);
+  //     emailHelper.sendEmail(verifyAccount);
+
+  //     // Save OTP and expiry to DB
+  //     const authentication = {
+  //       oneTimeCode: otp,
+  //       expireAt: new Date(Date.now() + 3 * 60000),
+  //     };
+  //     await User.findByIdAndUpdate(isExistUser._id, { $set: { authentication } });
+
+  //     throw new ApiError(
+  //       StatusCodes.FORBIDDEN,
+  //       'Please verify your account, then try to login again'
+  //     );
+
+
+  //   }
 
   //check user status
   if (isExistUser.status === 'block') {
@@ -259,7 +260,7 @@ const loginUserFromDB = async (payload: ILoginData) => {
 
   // Exclude password before returning user object
   const { password: _password, ...userWithoutPassword } = isExistUser.toObject ? isExistUser.toObject() : isExistUser;
-  return { token:createToken, user: userWithoutPassword };
+  return { token: createToken, user: userWithoutPassword };
 };
 const adminloginUserFromDB = async (payload: ILoginData) => {
   const { email, password } = payload;
@@ -296,6 +297,52 @@ const adminloginUserFromDB = async (payload: ILoginData) => {
     config.jwt.jwt_secret as Secret,
     config.jwt.jwt_expire_in as string
   );
+
+  return { createToken };
+};
+const partnerloginUserFromDB = async (payload: ILoginData , res: Response) => {
+  const { email, password } = payload;
+  const isExistUser = await User.findOne({ email }).select('+password');
+
+  if (!isExistUser) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  }
+
+  if (isExistUser.role !== USER_ROLES.PARTNER) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'You don’t have permission to access partner dashboard.');
+  }
+
+
+  //check user status
+  if (isExistUser.status === 'block') {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'You don’t have permission to access this content.It looks like your account has been blocked.'
+    );
+  }
+
+  //check match password
+  if (
+    password &&
+    !(await User.isMatchPassword(password, isExistUser.password))
+  ) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Password is incorrect!');
+  }
+
+  //create token
+  const createToken = jwtHelper.createToken(
+    { id: isExistUser._id, role: isExistUser.role },
+    config.jwt.jwt_secret as Secret,
+    config.jwt.jwt_expire_in as string
+  );
+
+  // set cookie
+  // res.cookie('token', createToken, {
+  //   httpOnly: true,
+  //   secure: true,
+  //   path: "/",
+  //   maxAge: 60 * 60 * 24 * 7, // 7 days
+  // });
 
   return { createToken };
 };
@@ -339,7 +386,7 @@ const resetPasswordToDB = async (payload: IAuthResetPassword) => {
 
 
   // check user exists
-  const isExistUser = await User.findOne({ 'authentication.oneTimeCode': otp})
+  const isExistUser = await User.findOne({ 'authentication.oneTimeCode': otp })
     .select('_id password')
     .lean();
   if (!isExistUser) {
@@ -444,7 +491,7 @@ const renualRequestToDB = async (phone: string) => {
 
   // Prepare optional values in case application_form is available
   const memberShipId = (user.application_form as any)?.memberShipId || '';
-  const membershipType = (user.application_form as any )?.membershipType || '';
+  const membershipType = (user.application_form as any)?.membershipType || '';
 
   // Send renewal request email to each admin/super admin - run in background (no await)
   admins.forEach((admin) => {
@@ -465,6 +512,7 @@ export const AuthService = {
   adminloginUserFromDB,
   forgetPasswordToDB,
   loginUserFromDB,
+  partnerloginUserFromDB,
   resetPasswordToDB,
   resendOTPtoDB,
   verifyOTPToDB,

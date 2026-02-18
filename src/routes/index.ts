@@ -17,6 +17,7 @@ import { ContactFormRoutes } from '../app/modules/contactForm/contactForm.route'
 import { NotificationRoutes } from '../app/modules/notification/notification.route';
 import { EventRegistrationRoutes } from '../app/modules/event/eventRegistration/eventRegistration.route';
 import { ContactUsRoutes } from '../app/modules/contactUs/contactUs.route';
+import { PartnerRequestRoutes } from '../app/modules/partnerRequest/partnerRequest.route';
 const router = express.Router();
 
 const apiRoutes = [
@@ -92,6 +93,10 @@ const apiRoutes = [
     path: '/contact-us',
     route: ContactUsRoutes,
   },
+  {
+    path:'/partner-request',
+    route: PartnerRequestRoutes
+  }
 ];
 
 apiRoutes.forEach(route => router.use(route.path, route.route));
