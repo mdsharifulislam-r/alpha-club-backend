@@ -11,27 +11,27 @@ router
   .route('/')
   .post(
     validateRequest(CategoryValidation.createZodSchema),
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN , USER_ROLES.USER),
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN , USER_ROLES.USER, USER_ROLES.PARTNER),
     CategoryController.create
   )
   .get(
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER),
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER, USER_ROLES.PARTNER),
     CategoryController.getAll
   );
 
 router
   .route('/:id')
   .get(
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER),
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER, USER_ROLES.PARTNER),
     CategoryController.getById
   )
   .patch(
     validateRequest(CategoryValidation.updateZodSchema),
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER),
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER, USER_ROLES.PARTNER),
     CategoryController.update
   )
   .delete(
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER),
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER, USER_ROLES.PARTNER),
     CategoryController.remove
   );
 

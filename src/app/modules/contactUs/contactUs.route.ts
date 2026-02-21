@@ -13,10 +13,7 @@ router
     auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER),
     ContactUsController.create
   )
-  .get(
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER),
-    ContactUsController.getAll
-  );
+  .get(ContactUsController.getAll);
 
 router
   .route('/:id')

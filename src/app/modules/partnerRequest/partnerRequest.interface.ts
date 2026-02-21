@@ -11,9 +11,8 @@ export interface IPartnerRequest extends Document {
   contactName: string;
   contactEmail: string;
   contactPhone: string;
-  location: string;
   website: string;
-  about: string;
+  message: string;
 
   partnerShipStatus: PartnerShipStatus;
 

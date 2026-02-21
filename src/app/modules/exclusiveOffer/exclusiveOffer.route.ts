@@ -13,42 +13,47 @@ router
   .post(
     fileUploadHandler(),
     validateRequest(ExclusiveOfferValidation.createZodSchema),
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER),
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER, USER_ROLES.PARTNER),
     ExclusiveOfferController.create
   )
   .get(
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER),
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER, USER_ROLES.PARTNER),
     ExclusiveOfferController.getAll
   );
+
+ router.get("/my-offers",
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER, USER_ROLES.PARTNER),
+    ExclusiveOfferController.getMyOffers
+ )
 
 router
   .route('/:id')
   .get(
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER),
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER, USER_ROLES.PARTNER),
     ExclusiveOfferController.getById
   )
   .patch(
     fileUploadHandler(),
     // validateRequest(ExclusiveOfferValidation.updateZodSchema),
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER),
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER, USER_ROLES.PARTNER),
     ExclusiveOfferController.update
   )
   .delete(
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER),
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER, USER_ROLES.PARTNER),
     ExclusiveOfferController.remove
   );
 
 router
   .route('/favourite/:id')
   .post(
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER),
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER, USER_ROLES.PARTNER),
     ExclusiveOfferController.createFavorite
   );
 
 router
   .route('/all/favourite')
   .get(
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER),
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.USER, USER_ROLES.PARTNER),
     ExclusiveOfferController.getFavourites
   );
 

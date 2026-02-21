@@ -3,17 +3,25 @@ import { StatusCodes } from 'http-status-codes';
 import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
 import { ExclusiveOfferService } from './exclusiveOffer.service';
-import { getMultipleFilesPath, getSingleFilePath } from '../../../shared/getFilePath';
+import {
+  getMultipleFilesPath,
+  getSingleFilePath,
+} from '../../../shared/getFilePath';
+import { USER_ROLES } from '../../../enums/user';
 
 const create = catchAsync(async (req: Request, res: Response) => {
   const image = getMultipleFilesPath(req.files, 'image');
+  const { user: bodyUser, ...rest } = req.body;
+
   const data = {
-    ...req.body,
-    ...(image && { image }),
+    ...rest,
+    ...(image ? { image } : {}),
+    user: bodyUser ?? req.user?.id,
+    status: req.user?.role === USER_ROLES.ADMIN ? "approved" : "pending",
   };
 
   const result = await ExclusiveOfferService.createToDB(data);
-  
+
   sendResponse(res, {
     success: true,
     statusCode: StatusCodes.CREATED,
@@ -23,8 +31,12 @@ const create = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAll = catchAsync(async (req: Request, res: Response) => {
-  const result = await ExclusiveOfferService.getAllFromDB(req.query,req?.user?.id as string, req?.user?.role);
-  
+  const result = await ExclusiveOfferService.getAllFromDB(
+    req.query,
+    req?.user?.id as string,
+    req?.user?.role,
+  );
+
   sendResponse(res, {
     success: true,
     statusCode: StatusCodes.OK,
@@ -35,9 +47,32 @@ const getAll = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getMyOffers = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+
+  if (!userId) {
+    throw new Error('User ID not found');
+  }
+
+  const result = await ExclusiveOfferService.getMyOffersFromDB(
+    req.query,
+    userId,
+    req?.user?.role,
+  );
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'Exclusive offer retrieved successfully',
+    data: result,
+  });
+});
+
 const getById = catchAsync(async (req: Request, res: Response) => {
-  const result = await ExclusiveOfferService.getByIdFromDB(req.params?.id as string);
-  
+  const result = await ExclusiveOfferService.getByIdFromDB(
+    req.params?.id as string,
+  );
+
   sendResponse(res, {
     success: true,
     statusCode: StatusCodes.OK,
@@ -49,14 +84,14 @@ const getById = catchAsync(async (req: Request, res: Response) => {
 const update = catchAsync(async (req: Request, res: Response) => {
   const id = req?.params?.id;
   const image = getMultipleFilesPath(req.files, 'image');
-  
+
   const data = {
     ...req.body,
     ...(image && { image }),
   };
-  
+
   const result = await ExclusiveOfferService.updateInDB(id, data);
-  
+
   sendResponse(res, {
     success: true,
     statusCode: StatusCodes.OK,
@@ -67,7 +102,7 @@ const update = catchAsync(async (req: Request, res: Response) => {
 
 const remove = catchAsync(async (req: Request, res: Response) => {
   const result = await ExclusiveOfferService.deleteFromDB(req.params?.id);
-  
+
   sendResponse(res, {
     success: true,
     statusCode: StatusCodes.OK,
@@ -95,13 +130,16 @@ const createFavorite = catchAsync(async (req: Request, res: Response) => {
 
 const getFavourites = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.id;
-  
+
   if (!userId) {
     throw new Error('User ID not found');
   }
 
-  const result = await ExclusiveOfferService.getFavouritesFromDB(userId, req.query);
-  
+  const result = await ExclusiveOfferService.getFavouritesFromDB(
+    userId,
+    req.query,
+  );
+
   sendResponse(res, {
     success: true,
     statusCode: StatusCodes.OK,
@@ -119,5 +157,5 @@ export const ExclusiveOfferController = {
   remove,
   createFavorite,
   getFavourites,
+  getMyOffers,
 };
-

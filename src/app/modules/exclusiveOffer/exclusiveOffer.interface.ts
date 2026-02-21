@@ -1,4 +1,5 @@
 import { Model, Types } from "mongoose";
+import { IUser } from "../user/user.interface";
 
 export type IExclusiveOfferLocation = {
   type: "Point";                            // GeoJSON type
@@ -7,6 +8,7 @@ export type IExclusiveOfferLocation = {
 
 export type IExclusiveOffer = {
   _id?: string;
+  user: Types.ObjectId | IUser;                     // Reference to User
   name: string;                             // Exclusive offer name
   title: string;                            // Exclusive offer title
   location?: IExclusiveOfferLocation;       // GeoJSON location
@@ -18,6 +20,7 @@ export type IExclusiveOffer = {
     enable: boolean;
     value: number;
   };
+  status?: 'pending' | 'approved' | 'rejected';
   published?: boolean;                      // Whether the offer is published
   createdAt?: Date;
   updatedAt?: Date;

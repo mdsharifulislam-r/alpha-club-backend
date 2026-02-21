@@ -365,6 +365,7 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
         isFavourite: 1,
         description: 1,
         published:1,
+        status:1,
         category: {
           _id: 1,
           name: 1,
@@ -395,7 +396,166 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
     };
   } else {
     let modelQuery = ExclusiveOffer.find().select(
-      'name title image discount description location address published'
+      'name title image discount description location address published status'
+    ) as any;
+
+    const qb = new QueryBuilder(modelQuery, { ...query })
+      .paginate()
+      .search(['name', 'title'])
+      .filter(['lat', 'lng', 'km', 'minKm'])
+      .sort();
+
+    data = await qb.modelQuery.populate('category', 'name').lean();
+
+    pagination = await qb.getPaginationInfo();
+
+    const offerIds = data.map((offer: any) => offer._id);
+
+    const favs = await FavouriteExclusiveOffer.find(
+      {
+        user: userId,
+        exclusiveOffer: { $in: offerIds },
+      },
+      'exclusiveOffer'
+    ).lean();
+
+    const favSet = new Set(favs.map((f: any) => String(f.exclusiveOffer)));
+
+    data = data.map((offer: any) => ({
+      ...offer,
+      isFavourite: favSet.has(String(offer._id)),
+    }));
+  }
+
+  return { pagination, data };
+};
+const getMyOffersFromDB = async (query: Record<string, any>, userId: string, role: string) => {
+  const { lat, lng, maxKm, minKm, category } = query;
+
+  let data: any[] = [];
+  let pagination: any = {};
+
+  // If the user's role is 'USER', only fetch published offers
+  if (role && role === USER_ROLES.USER) {
+    query.published = true;
+  }
+  query.user = userId;
+
+  if (lat && lng) {
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    const geoNearQuery: any = {
+      near: {
+        type: 'Point',
+        coordinates: [Number(lng), Number(lat)],
+      },
+      distanceField: 'distance',
+      spherical: true,
+      ...(maxKm ? { maxDistance: Number(maxKm) * 1000 } : {}),
+      ...(minKm ? { minDistance: Number(minKm) * 1000 } : {}),
+      ...(query.published !== undefined ? { query: { published: query.published } } : {}),
+    };
+
+    const aggregationStages: any[] = [{ $geoNear: geoNearQuery }];
+
+    aggregationStages.push(
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'category',
+          foreignField: '_id',
+          as: 'category',
+        },
+      },
+      {
+        $unwind: {
+          path: '$category',
+          preserveNullAndEmptyArrays: true,
+        },
+      }
+    );
+
+    // Filter by category
+    if (category) {
+      const catId = /^[a-fA-F0-9]{24}$/.test(category)
+        ? new mongoose.Types.ObjectId(category)
+        : category;
+
+      aggregationStages.push({
+        $match: { 'category._id': catId },
+      });
+    }
+
+    // Favourite lookup (FIXED ObjectId comparison)
+    aggregationStages.push({
+      $lookup: {
+        from: 'favouriteexclusiveoffers',
+        let: { offerId: '$_id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$exclusiveOffer', '$$offerId'] },
+                  { $eq: ['$user', userObjectId] },
+                ],
+              },
+            },
+          },
+        ],
+        as: 'favourite',
+      },
+    });
+
+    aggregationStages.push({
+      $addFields: {
+        isFavourite: { $gt: [{ $size: '$favourite' }, 0] },
+      },
+    });
+
+    aggregationStages.push({
+      $project: {
+        distance: 1,
+        image: 1,
+        name: 1,
+        discount: 1,
+        title: 1,
+        location: 1,
+        isFavourite: 1,
+        description: 1,
+        published:1,
+        status:1,
+        category: {
+          _id: 1,
+          name: 1,
+        },
+      },
+    });
+
+    // Pagination
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const countAggregation = [...aggregationStages, { $count: 'total' }];
+    const totalResult = await ExclusiveOffer.aggregate(countAggregation);
+    const total = totalResult[0]?.total || 0;
+
+    data = await ExclusiveOffer.aggregate([
+      ...aggregationStages,
+      { $skip: skip },
+      { $limit: limit },
+    ]);
+
+    pagination = {
+      total,
+      limit,
+      page,
+      totalPage: Math.ceil(total / limit),
+    };
+  } else {
+    let modelQuery = ExclusiveOffer.find().select(
+      'name title image discount description location address published status'
     ) as any;
 
     const qb = new QueryBuilder(modelQuery, { ...query })
@@ -574,4 +734,5 @@ export const ExclusiveOfferService = {
   deleteFromDB,
   createFavourite,
   getFavouritesFromDB,
+  getMyOffersFromDB
 };

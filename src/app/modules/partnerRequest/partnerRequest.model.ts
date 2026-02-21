@@ -15,9 +15,8 @@ const partnerShipApplicationSchema = new Schema<IPartnerRequest, PartnerRequestM
     contactName: { type: String, required: true, trim: true },
     contactEmail: { type: String, required: true, trim: true },
     contactPhone: { type: String, required: true, trim: true },
-    location: { type: String, required: true, trim: true },
     website: { type: String, required: true, trim: true },
-    about: { type: String, required: true, trim: true },
+    message: { type: String, required: true, trim: true },
     partnerShipStatus: {
       type: String,
       enum: Object.values(PartnerShipStatus),

@@ -11,6 +11,11 @@ const exclusiveOfferSchema = new Schema<IExclusiveOffer, ExclusiveOfferModel>(
       required: true,
       trim: true,
     },
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
     title: {
       type: String,
       required: true,
@@ -49,6 +54,11 @@ const exclusiveOfferSchema = new Schema<IExclusiveOffer, ExclusiveOfferModel>(
     category: {
       type: Schema.Types.ObjectId,
       ref: 'Category',
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'approved',
     },
     published: {
       type: Boolean,
