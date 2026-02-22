@@ -278,8 +278,9 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
   let pagination: any = {};
 
   // If the user's role is 'USER', only fetch published offers
-  if (role && role === USER_ROLES.USER) {
+  if (role && role === USER_ROLES.USER || role === USER_ROLES.PARTNER) {
     query.published = true;
+    query.status = true;
   }
 
   if (lat && lng) {
@@ -432,6 +433,7 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
 const getMyOffersFromDB = async (query: Record<string, any>, userId: string, role: string) => {
   const { lat, lng, maxKm, minKm, category } = query;
 
+  console.log(query,'my  -query');
   let data: any[] = [];
   let pagination: any = {};
 

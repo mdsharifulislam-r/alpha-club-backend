@@ -18,6 +18,7 @@ const create = catchAsync(async (req: Request, res: Response) => {
     ...(image ? { image } : {}),
     user: bodyUser ?? req.user?.id,
     status: req.user?.role === USER_ROLES.ADMIN ? "approved" : "pending",
+    published: req.user?.role === USER_ROLES.PARTNER ? false : true
   };
 
   const result = await ExclusiveOfferService.createToDB(data);
