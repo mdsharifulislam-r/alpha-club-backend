@@ -16,7 +16,7 @@ router
     MemberShipApplicationController.create
   )
   .get(
-    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
+    auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN , USER_ROLES.PARTNER),
     MemberShipApplicationController.getAll
   );
 

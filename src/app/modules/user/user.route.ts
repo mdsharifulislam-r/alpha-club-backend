@@ -11,7 +11,7 @@ router
     auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN , USER_ROLES.USER),
     UserController.createNewUser)
   .get(
-    auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.USER),
+    auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.USER , USER_ROLES.PARTNER),
     (req: Request, res: Response, next: NextFunction) => {
       return UserController.getAllUsers(req, res, next);
     })
