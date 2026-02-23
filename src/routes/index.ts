@@ -19,6 +19,7 @@ import { EventRegistrationRoutes } from '../app/modules/event/eventRegistration/
 import { ContactUsRoutes } from '../app/modules/contactUs/contactUs.route';
 import { PartnerRequestRoutes } from '../app/modules/partnerRequest/partnerRequest.route';
 import { DailyAttendanceRoutes } from '../app/modules/daily-attendance/daily-attendance.route';
+import { MemberRedemptionRoutes } from '../app/modules/member-redemption/member-redemption.route';
 const router = express.Router();
 
 const apiRoutes = [
@@ -101,6 +102,10 @@ const apiRoutes = [
   {
     path:'/attendance',
     route:DailyAttendanceRoutes
+  },
+  {
+    path:'/redemption',
+    route: MemberRedemptionRoutes
   }
 ];
 

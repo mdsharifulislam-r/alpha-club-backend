@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
 import { AuthService } from './auth.service';
+import config from '../../../config';
 
 // Handles account renewal requests
 const renualRequest = catchAsync(async (req: Request, res: Response) => {
@@ -67,8 +68,14 @@ const adminLoginUser = catchAsync(async (req: Request, res: Response) => {
 
 const partnerLoginUser = catchAsync(async (req: Request, res: Response) => {
   const { ...loginData } = req.body;
-  const result = await AuthService.partnerloginUserFromDB(loginData , res);
+  const result = await AuthService.partnerloginUserFromDB(loginData, res);
 
+
+  const cookieOptions = {
+    secure: config.node_env === 'production',
+    httpOnly: true,
+  };
+  res.cookie('token', result.createToken , cookieOptions);
   sendResponse(res, {
     success: true,
     statusCode: StatusCodes.OK,
