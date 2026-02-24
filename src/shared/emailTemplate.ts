@@ -285,7 +285,7 @@ interface IApplicationFormAdminValues {
   userName: string;
   userEmail: string;
   userContact: string;
-  userMessage: string;
+  userMessage?: string;
   adminEmail: string;  // admin email, for admin notification
   membershipType?: string;
 }
@@ -324,6 +324,40 @@ const applicationFormAdmin = (values: IApplicationFormAdminValues) => {
           </div>
           <div style="text-align:center; margin:28px 0 0 0;">
             <a href="${`${config.dashboard_url}/user/contact-from`}" style="display:inline-block; background:#295ec9; color:#fff; font-size:16px; font-weight:600; padding:12px 26px; border-radius:7px; text-decoration:none; letter-spacing:0.5px;">
+              View All Application Requests
+            </a>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+  };
+  return data;
+};
+const membershipApplicationForm = (values: IApplicationFormAdminValues) => {
+  const data = {
+    to: values.adminEmail,
+    subject: `${values.membershipType ? 'New Membership Application Request' : 'New Contract Application Request'}`,
+    html: `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${values.membershipType ? 'New Membership Application Request' :'New Contract Application Request'}</title>
+      </head>
+      <body style="font-family: 'Inter', Arial, sans-serif; background: #f6f8fb; margin: 0; padding: 0;">
+        <div style="max-width: 490px; margin: 40px auto; background: #ffffff; border-radius: 18px; padding: 38px 28px 34px 28px; box-shadow: 0 8px 26px rgba(20,34,58,0.09);">
+          <h1 style="color: #295ec9; font-size: 22px; font-weight: bold; margin: 0 0 18px 0;">
+            ${values.membershipType ? 'New Membership Application Request' : 'New Contract Application Request'}
+          </h1>
+          <p style="font-size:15px; color:#374151; margin-bottom:10px;">
+            <strong>Name:</strong> ${values.userName}<br>
+            <strong>Email:</strong> ${values.userEmail}<br>
+            <strong>Contact:</strong> ${values.userContact}
+          </p>
+          <div style="text-align:center; margin:28px 0 0 0;">
+            <a href="${`${config.dashboard_url}/membership-application`}" style="display:inline-block; background:#295ec9; color:#fff; font-size:16px; font-weight:600; padding:12px 26px; border-radius:7px; text-decoration:none; letter-spacing:0.5px;">
               View All Application Requests
             </a>
           </div>
@@ -564,5 +598,6 @@ export const emailTemplate = {
   applicationFormAdmin,
   renewalRequest,
   partnerApproved,
-  partnerRejected
+  partnerRejected,
+  membershipApplicationForm
 };

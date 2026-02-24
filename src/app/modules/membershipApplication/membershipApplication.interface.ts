@@ -4,6 +4,7 @@ import { FamilyMemberRelation, MembershipStatus } from "./membershipApplication.
 
 export type IMemberShipApplication = {
   _id?: string; // optional because Mongoose will generate it
+  profileImage?: string;
   memberShipId?: string; // AC-01144 (Auto Generated)
   membershipType: string; // sink with others table
   name: string;
@@ -32,8 +33,8 @@ export type IMemberShipApplication = {
   workLocation?: string;
   annualGrossSalary?: number;
   benefitsAndLifestyleInterests?: string[];
-  image?: string;
-  logo?: string;
+  image?: string[];
+  logo?: string[];
   confirmAcknowledgement?: boolean;
   confirmAgreement?: boolean;
 

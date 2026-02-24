@@ -22,10 +22,12 @@ const createFrom = catchAsync(async (req: Request, res: Response) => {
 
     const image = getSingleFilePath(req.files, 'image');
     const logo = getSingleFilePath(req.files, 'logo');
+    const profileImage = getSingleFilePath(req.files, 'profileImage');
     const data = {
       ...req.body,
       ...(logo && { logo }),
       ...(image && { image }),
+      ...(profileImage && { profileImage }),
     };
 
     console.log(data);

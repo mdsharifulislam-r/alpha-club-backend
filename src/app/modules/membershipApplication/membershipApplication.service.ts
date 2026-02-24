@@ -11,6 +11,8 @@ import { emailTemplate } from '../../../shared/emailTemplate';
 import generateRandomPassword from '../../../util/generateRandomPassword';
 import { USER_ROLES } from '../../../enums/user';
 import { MemberShipPlan } from '../membershipPlan/membershipPlan.model';
+import { NotificationCount } from '../notification/notificationCountModel';
+import { Notification } from '../notification/notification.mode';
 
 // const createToDB = async (payload: IMemberShipApplication) => {
 //   // Check membership plan
@@ -130,34 +132,34 @@ const createToDB = async (payload: IMemberShipApplication) => {
   }
 
   // Duplicate check by phone number
-  // const phoneExists = await MemberShipApplication.findOne({
-  //   phone: payload.phone,
-  //   membershipStatus: {
-  //     $in: [MembershipStatus.PENDING, MembershipStatus.ACTIVE],
-  //   },
-  // });
+  const phoneExists = await MemberShipApplication.findOne({
+    phone: payload.phone,
+    membershipStatus: {
+      $in: [MembershipStatus.PENDING, MembershipStatus.ACTIVE],
+    },
+  });
 
-  // if (phoneExists) {
-  //   throw new ApiError(
-  //     StatusCodes.BAD_REQUEST,
-  //     `You already applied with this phone number`
-  //   );
-  // }
+  if (phoneExists) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      `You already applied with this phone number`
+    );
+  }
 
   // Duplicate check by email
-  // const emailExists = await MemberShipApplication.findOne({
-  //   email: payload.email,
-  //   membershipStatus: {
-  //     $in: [MembershipStatus.PENDING, MembershipStatus.ACTIVE],
-  //   },
-  // });
+  const emailExists = await MemberShipApplication.findOne({
+    email: payload.email,
+    membershipStatus: {
+      $in: [MembershipStatus.PENDING, MembershipStatus.ACTIVE],
+    },
+  });
 
-  // if (emailExists) {
-  //   throw new ApiError(
-  //     StatusCodes.BAD_REQUEST,
-  //     `You already applied with this email`
-  //   );
-  // }
+  if (emailExists) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      `You already applied with this email`
+    );
+  }
 
   // Set default status
   payload.membershipStatus = MembershipStatus.PENDING;
@@ -166,6 +168,46 @@ const createToDB = async (payload: IMemberShipApplication) => {
   const expireDate = new Date();
   expireDate.setFullYear(expireDate.getFullYear() + 4);
   payload.expireId = expireDate;
+
+  // 🔔 Notify Admins
+  const adminOrSuperAdminUsers = await User.find({
+    role: { $in: [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN] },
+  });
+
+  for (const admin of adminOrSuperAdminUsers) {
+    // 📧 Email
+    if (admin.email) {
+      const emailPayload = {
+        userName: payload.name,
+        userEmail: payload.email,
+        userContact: payload.phone,
+        adminEmail: admin.email,
+        membershipType: payload.membershipType
+      };
+
+      const sendEmail =
+        emailTemplate.membershipApplicationForm(emailPayload);
+      emailHelper.sendEmail(sendEmail);
+    }
+
+    // 🔔 Notification
+    Notification.create({
+      receiver: admin._id,
+      title: "New Membership Application Submitted",
+      message: 'A new membership application has been submitted',
+      sender: null,
+      refId: admin._id,
+      path: "/membership-application",
+      seen: false,
+    }).catch(() => { });
+
+    // 🔢 Notification count
+    NotificationCount.findOneAndUpdate(
+      { user: admin._id },
+      { $inc: { count: 1 } },
+      { new: true, upsert: true }
+    ).catch(() => { });
+  }
 
   return await MemberShipApplication.create(payload);
 };
@@ -317,6 +359,7 @@ const updateInDB = async (
           email: application.email,
           phone: application.phone,
           password: randomPassword,
+          profileImage: application.profileImage,
           verified: true,
           application_form: application._id,
         });

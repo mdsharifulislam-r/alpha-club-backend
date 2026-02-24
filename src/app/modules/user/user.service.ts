@@ -293,7 +293,7 @@ const updateSingleUserToDB = async (
 };
 
 const getAllUsers = async (query: Record<string, any>, userId: string) => {
-  const result = new QueryBuilder(User.find({ _id: { $ne: userId } }), query)
+  const result = new QueryBuilder(User.find({ _id: { $ne: userId } , role: { $ne: USER_ROLES.SUPER_ADMIN }}), query)
     .paginate()
     .search(userSearchableField)
     .fields()

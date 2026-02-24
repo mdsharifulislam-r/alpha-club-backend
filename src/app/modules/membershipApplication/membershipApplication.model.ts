@@ -25,6 +25,10 @@ const familyMemberSchema = new Schema(
 
 const memberShipApplicationSchema = new Schema<IMemberShipApplication, MemberShipApplicationModel>(
   {
+    profileImage: {
+      type: String,
+      trim: true,
+    },
     memberShipId: {
       type: String,
       unique: true,
@@ -79,8 +83,8 @@ const memberShipApplicationSchema = new Schema<IMemberShipApplication, MemberShi
     workLocation: { type: String },
     annualGrossSalary: { type: Number },
     benefitsAndLifestyleInterests: { type: [String] }, // Array of strings
-    image: { type: String },
-    logo: { type: String },
+    image: { type: [String] }, // array of string
+    logo: { type: [String] }, // array of string
     confirmAcknowledgement: { type: Boolean },
     confirmAgreement: { type: Boolean },
 
