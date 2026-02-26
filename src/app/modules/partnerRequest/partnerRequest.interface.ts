@@ -6,7 +6,7 @@ export interface IPartnerRequest extends Document {
   _id?: string; // MongoDB generated
   partnerShipId?: string; // e.g., AC-00001 (auto-generated)
 
-  prprofileImage: string;
+  profileImage: string;
   companyName: string;
   industry: string;
   contactName: string;

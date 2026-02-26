@@ -10,7 +10,8 @@ const router = express.Router();
 router
   .route('/')
   .post(
-    PartnerRequestController.create
+    fileUploadHandler(),            // run upload first
+    PartnerRequestController.create // then handle creation
   )
   .get(
     // auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),

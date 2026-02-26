@@ -7,7 +7,15 @@ import { getSingleFilePath } from '../../../shared/getFilePath';
 import { PartnerRequestService } from './partnerRequest.service';
 
 const create = catchAsync(async (req: Request, res: Response) => {
-  const result = await PartnerRequestService.createToDB(req.body);
+
+  const profileImage = getSingleFilePath(req.files, 'profileImage');
+
+   const data = {
+      ...req.body,
+      profileImage
+   }
+   console.log(req.file)
+  const result = await PartnerRequestService.createToDB(data);
 
   sendResponse(res, {
     success: true,
@@ -20,16 +28,16 @@ const create = catchAsync(async (req: Request, res: Response) => {
 const createFrom = catchAsync(async (req: Request, res: Response) => {
   // const result = await MemberShipApplicationService.createFromDB(req.body);
 
-    const image = getSingleFilePath(req.files, 'image');
-    const logo = getSingleFilePath(req.files, 'logo');
-    const data = {
-      ...req.body,
-      ...(logo && { logo }),
-      ...(image && { image }),
-    };
+  const image = getSingleFilePath(req.files, 'image');
+  const logo = getSingleFilePath(req.files, 'logo');
+  const data = {
+    ...req.body,
+    ...(logo && { logo }),
+    ...(image && { image }),
+  };
 
-    console.log(data);
-    const result = await PartnerRequestService.createToDB(data);
+  console.log(data);
+  const result = await PartnerRequestService.createToDB(data);
 
   sendResponse(res, {
     success: true,
