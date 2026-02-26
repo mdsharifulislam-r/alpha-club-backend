@@ -4,7 +4,7 @@ import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
 import { MemberShipApplicationService } from './membershipApplication.service';
 import mongoose from 'mongoose';
-import { getSingleFilePath } from '../../../shared/getFilePath';
+import { getMultipleFilesPath, getSingleFilePath } from '../../../shared/getFilePath';
 
 const create = catchAsync(async (req: Request, res: Response) => {
   const result = await MemberShipApplicationService.createToDB(req.body);
@@ -20,17 +20,16 @@ const create = catchAsync(async (req: Request, res: Response) => {
 const createFrom = catchAsync(async (req: Request, res: Response) => {
   // const result = await MemberShipApplicationService.createFromDB(req.body);
 
-    const image = getSingleFilePath(req.files, 'image');
-    const logo = getSingleFilePath(req.files, 'logo');
-    const profileImage = getSingleFilePath(req.files, 'profileImage');
-    const data = {
-      ...req.body,
-      ...(logo && { logo }),
-      ...(image && { image }),
-      ...(profileImage && { profileImage }),
-    };
-
-    console.log(data);
+  const image = getMultipleFilesPath(req.files, 'image');
+  const logo = getMultipleFilesPath(req.files, 'logo');
+  const profileImage = getSingleFilePath(req.files, 'profileImage');
+  const data = {
+    ...req.body,
+    ...(logo && { logo }),
+    ...(image && { image }),
+    ...(profileImage && { profileImage }),
+  };
+  
     const result = await MemberShipApplicationService.createToDB(data);
 
   sendResponse(res, {

@@ -66,14 +66,16 @@ const fileUploadHandler = (fields?: { name: string; maxCount: number }[]) => {
         file.mimetype === 'image/jpeg' ||
         file.mimetype === 'image/png' ||
         file.mimetype === 'image/jpg' ||
-        file.mimetype === 'application/pdf'
+        file.mimetype === 'image/webp' ||
+        file.mimetype === 'image/gif' ||
+        file.mimetype === 'image/bmp'
       ) {
         cb(null, true);
       } else {
         cb(
           new ApiError(
             StatusCodes.BAD_REQUEST,
-            'Only .jpeg, .png, .jpg file supported'
+            'Only .jpeg, .png, .jpg , .webp, .gif, .bmp file supported'
           )
         );
       }
@@ -105,9 +107,9 @@ const fileUploadHandler = (fields?: { name: string; maxCount: number }[]) => {
   }).fields(fields || [
     { name: 'profileImage', maxCount: 1 },
     { name: 'image', maxCount: 10 },
-    { name: 'logo', maxCount: 1 },
-    { name: 'media', maxCount: 3 },
-    { name: 'doc', maxCount: 3 },
+    { name: 'logo', maxCount: 5 },
+    { name: 'media', maxCount: 5 },
+    { name: 'doc', maxCount: 5 },
   ]);
   return upload;
 };

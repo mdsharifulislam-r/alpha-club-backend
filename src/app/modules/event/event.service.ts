@@ -94,6 +94,7 @@ const deleteFromDB = async (id: string) => {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Event not found');
   }
   const deleted = await Event.findByIdAndDelete(id).lean();
+  await EventRegistration.deleteMany({ event: id });
   return deleted;
 };
 

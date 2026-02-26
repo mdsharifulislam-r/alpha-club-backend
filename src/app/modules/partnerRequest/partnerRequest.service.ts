@@ -43,43 +43,41 @@ const createToDB = async (payload: IPartnerRequest) => {
   });
 
   // 🔔 Notify Admins
-  await Promise.all(
-    adminOrSuperAdminUsers.map(async (admin) => {
-      // 📧 Send Email
-      // if (admin.email) {
-      //   const emailPayload = {
-      //     userName: payload.contactName,
-      //     userEmail: payload.contactEmail,
-      //     userContact: payload.contactPhone,
-      //     userMessage: '',
-      //     adminEmail: admin.email
-      //   };
+  for (const admin of adminOrSuperAdminUsers) {
+    // 📧 Send Email
+    if (admin.email) {
+      const emailPayload = {
+        userName: payload.contactName,
+        userEmail: payload.contactEmail,
+        userContact: payload.contactPhone,
+        userMessage: '',
+        adminEmail: admin.email
+      };
 
-      //   const sendEmail =
-      //     emailTemplate.applicationFormAdmin(emailPayload);
+      const sendEmail =
+        emailTemplate.applicationFormAdmin(emailPayload);
 
-      //   await emailHelper.sendEmail(sendEmail);
-      // }
+      emailHelper.sendEmail(sendEmail);
+    }
 
-      // 🔔 Create Notification
-      await Notification.create({
-        receiver: admin._id,
-        title: 'New Partnership Application Submitted',
-        message: 'A new partnership application has been submitted',
-        sender: null,
-        refId: application._id,
-        path: '/admin/membership-applications', // better route
-        seen: false,
-      });
+    // 🔔 Create Notification
+    Notification.create({
+      receiver: admin._id,
+      title: 'New Partnership Application Submitted',
+      message: 'A new partnership application has been submitted',
+      sender: null,
+      refId: application._id,
+      path: '/admin/membership-applications', // better route
+      seen: false,
+    });
 
-      // 🔢 Increase Notification Count
-      await NotificationCount.findOneAndUpdate(
-        { user: admin._id },
-        { $inc: { count: 1 } },
-        { new: true, upsert: true }
-      );
-    })
-  );
+    // 🔢 Increase Notification Count
+    NotificationCount.findOneAndUpdate(
+      { user: admin._id },
+      { $inc: { count: 1 } },
+      { new: true, upsert: true }
+    );
+  }
 
   return application;
 };
@@ -130,7 +128,7 @@ const updateInDB = async (
   });
 
   // ✅ If status is being changed to ACTIVE
-  if ( newStatus === PartnerShipStatus.ACTIVE && previousStatus !== PartnerShipStatus.ACTIVE ) {
+  if (newStatus === PartnerShipStatus.ACTIVE && previousStatus !== PartnerShipStatus.ACTIVE) {
     // 🔍 Check if user already exists
     let existingUser = await User.findOne({
       $or: [
@@ -144,6 +142,7 @@ const updateInDB = async (
       const randomPassword = generateRandomPassword(12);
 
       const newUser = await User.create({
+        profileImage: application.prprofileImage,
         name: application.contactName,
         email: application.contactEmail,
         phone: application.contactPhone,
@@ -176,7 +175,7 @@ const updateInDB = async (
       contactName: application.contactName,
     });
 
-     emailHelper.sendEmail(emailData);
+    emailHelper.sendEmail(emailData);
   }
 
   // 🔄 Update PartnerRequest

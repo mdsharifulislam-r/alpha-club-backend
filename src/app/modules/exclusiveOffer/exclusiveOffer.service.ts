@@ -278,9 +278,9 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
   let pagination: any = {};
 
   // If the user's role is 'USER', only fetch published offers
-  if (role && role === USER_ROLES.USER || role === USER_ROLES.PARTNER) {
+  if (role && role === USER_ROLES.USER) {
     query.published = true;
-    query.status = true;
+    query.status = 'approved';
   }
 
   if (lat && lng) {
@@ -296,6 +296,7 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
       ...(maxKm ? { maxDistance: Number(maxKm) * 1000 } : {}),
       ...(minKm ? { minDistance: Number(minKm) * 1000 } : {}),
       ...(query.published !== undefined ? { query: { published: query.published } } : {}),
+      ...(query.status !== undefined ? { query: { status: query.status } } : {}),
     };
 
     const aggregationStages: any[] = [{ $geoNear: geoNearQuery }];
@@ -365,8 +366,8 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
         location: 1,
         isFavourite: 1,
         description: 1,
-        published:1,
-        status:1,
+        published: 1,
+        status: 1,
         category: {
           _id: 1,
           name: 1,
@@ -433,7 +434,7 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
 const getMyOffersFromDB = async (query: Record<string, any>, userId: string, role: string) => {
   const { lat, lng, maxKm, minKm, category } = query;
 
-  console.log(query,'my  -query');
+  console.log(query, 'my  -query');
   let data: any[] = [];
   let pagination: any = {};
 
@@ -525,8 +526,8 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
         location: 1,
         isFavourite: 1,
         description: 1,
-        published:1,
-        status:1,
+        published: 1,
+        status: 1,
         category: {
           _id: 1,
           name: 1,
@@ -603,6 +604,8 @@ const getByIdFromDB = async (id: string) => {
 };
 
 const updateInDB = async (id: string, payload: Partial<IExclusiveOffer> & { removedFiles?: string[] }) => {
+
+
   // Always get current document images for update logic
   const existing = await ExclusiveOffer.findById(id).select('image').lean();
   let existingImages: string[] = Array.isArray(existing?.image) ? existing.image.map(String) : [];
