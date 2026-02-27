@@ -32,6 +32,7 @@ router
   )
   .patch(
     auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
+    fileUploadHandler(),
     MemberShipApplicationController.update
   )
   .delete(

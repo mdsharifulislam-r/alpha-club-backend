@@ -397,6 +397,14 @@ const updateInDB = async (
     runValidators: true,
   }).lean();
 
+  if(payload.profileImage){
+     await User.findOneAndUpdate(
+       { application_form: id },
+       { $set: { profileImage: payload.profileImage } },
+       { new: true, runValidators: true }
+     )
+  }
+
   if (!updated) {
     throw new ApiError(
       StatusCodes.NOT_FOUND,

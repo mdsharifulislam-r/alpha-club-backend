@@ -141,6 +141,17 @@ const approvePendingUser = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getAllPartnersUsers = catchAsync(async (req: Request, res: Response) => {
+  const result = await UserService.getAllPartnersUsers(req.query , req.user?.id);
+  
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'Users retrieved successfully',
+    data: result,
+  });
+});
+
 
 export const UserController = {
   updateUser,
@@ -150,5 +161,6 @@ export const UserController = {
   getStatistics,
   updateSingleUser,
   sendNotificationToUsers,
-  approvePendingUser
+  approvePendingUser,
+  getAllPartnersUsers
 };

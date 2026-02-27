@@ -46,6 +46,12 @@ router
     auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.USER),
     UserController.getStatistics);
 
+router
+  .route('/all-partner-users')
+  .get(
+    auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.USER, USER_ROLES.PARTNER),
+    UserController.getAllPartnersUsers);
+
 router.patch('/approve-pending-users/:id', auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN), UserController.approvePendingUser);
 
 

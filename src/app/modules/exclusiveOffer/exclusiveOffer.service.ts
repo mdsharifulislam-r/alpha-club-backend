@@ -7,6 +7,7 @@ import { getLatLongWithLocalRequest } from './exclusiveOffer.util';
 import { FavouriteExclusiveOffer } from './favourite/favouriteExclusiveOffer.model';
 import mongoose from 'mongoose';
 import { USER_ROLES } from '../../../enums/user';
+import { OfferView } from '../offerView/offerView.model';
 
 const createToDB = async (payload: IExclusiveOffer) => {
   const { latitude, longitude } = await getLatLongWithLocalRequest(
@@ -398,7 +399,7 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
     };
   } else {
     let modelQuery = ExclusiveOffer.find().select(
-      'name title image discount description location address published status'
+      'name title image discount description location address published status category user'
     ) as any;
 
     const qb = new QueryBuilder(modelQuery, { ...query })
@@ -407,8 +408,10 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
       .filter(['lat', 'lng', 'km', 'minKm'])
       .sort();
 
-    data = await qb.modelQuery.populate('category', 'name').lean();
-
+    data = await qb.modelQuery
+      .populate('category', 'name') // only get name field
+      .populate('user', 'name') // optional fields
+      .lean();
     pagination = await qb.getPaginationInfo();
 
     const offerIds = data.map((offer: any) => offer._id);
@@ -425,7 +428,7 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
 
     data = data.map((offer: any) => ({
       ...offer,
-      isFavourite: favSet.has(String(offer._id)),
+      isFavourite: favSet.has(String(offer._id))
     }));
   }
 
@@ -489,6 +492,26 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
       });
     }
 
+    // Views lookup
+    aggregationStages.push({
+      $lookup: {
+        from: 'offerviews',       // collection name for views
+        let: { offerId: '$_id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ['$offer', '$$offerId'] }, // match by offer ID
+            },
+          },
+          {
+            $count: 'views', // directly name it views
+          },
+        ],
+        as: 'views', // temporary array
+      },
+    });
+
+
     // Favourite lookup (FIXED ObjectId comparison)
     aggregationStages.push({
       $lookup: {
@@ -510,9 +533,11 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
       },
     });
 
+    // Add isFavourite field
     aggregationStages.push({
       $addFields: {
         isFavourite: { $gt: [{ $size: '$favourite' }, 0] },
+        views: { $ifNull: [{ $arrayElemAt: ['$views.views', 0] }, 0] }, // now views is a number
       },
     });
 
@@ -528,6 +553,7 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
         description: 1,
         published: 1,
         status: 1,
+        views: 1,
         category: {
           _id: 1,
           name: 1,
@@ -582,26 +608,49 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
     ).lean();
 
     const favSet = new Set(favs.map((f: any) => String(f.exclusiveOffer)));
+    // 1️⃣ Get all view counts grouped by offer
+    const offerViews = await OfferView.aggregate([
+      { $match: { offer: { $in: offerIds } } },
+      { $group: { _id: "$offer", count: { $sum: 1 } } },
+    ]);
 
+    // 2️⃣ Make a map for easy lookup
+    const viewsMap = new Map<string, number>();
+    offerViews.forEach((v: any) => {
+      viewsMap.set(String(v._id), v.count);
+    });
     data = data.map((offer: any) => ({
       ...offer,
       isFavourite: favSet.has(String(offer._id)),
+      views: viewsMap.get(String(offer._id)) || 0,
     }));
   }
 
   return { pagination, data };
 };
 
-const getByIdFromDB = async (id: string) => {
+const getByIdFromDB = async (id: string, userId: string) => {
+  // Fetch the exclusive offer
   const exclusiveOffer = await ExclusiveOffer.findById(id)
-    .populate('category', 'name')
+    .populate("category", "name")
     .lean();
 
   if (!exclusiveOffer) {
-    throw new ApiError(StatusCodes.NOT_FOUND, 'Exclusive offer not found');
+    throw new ApiError(StatusCodes.NOT_FOUND, "Exclusive offer not found");
   }
+
+  if (exclusiveOffer.status === 'approved') {
+    // Update timestamp if view exists, or create a new one
+    await OfferView.findOneAndUpdate(
+      { user: userId, offer: id },
+      { $set: { updatedAt: new Date() } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+  }
+
   return exclusiveOffer;
 };
+
 
 const updateInDB = async (id: string, payload: Partial<IExclusiveOffer> & { removedFiles?: string[] }) => {
 

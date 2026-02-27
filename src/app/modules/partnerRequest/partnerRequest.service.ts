@@ -67,7 +67,7 @@ const createToDB = async (payload: IPartnerRequest) => {
       message: 'A new partnership application has been submitted',
       sender: null,
       refId: application._id,
-      path: '/admin/membership-applications', // better route
+      path: '/membership-application', // better route
       seen: false,
     });
 
@@ -142,7 +142,7 @@ const updateInDB = async (
       const randomPassword = generateRandomPassword(12);
 
       const newUser = await User.create({
-        profileImage: application.prprofileImage,
+        profileImage: application.profileImage,
         name: application.contactName,
         email: application.contactEmail,
         phone: application.contactPhone,

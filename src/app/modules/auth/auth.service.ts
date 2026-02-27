@@ -304,7 +304,7 @@ const partnerloginUserFromDB = async (payload: ILoginData , res: Response) => {
   const { email, password } = payload;
   const isExistUser = await User.findOne({ email }).select('+password');
 
-  if (!isExistUser) {
+  if (!isExistUser ) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
 

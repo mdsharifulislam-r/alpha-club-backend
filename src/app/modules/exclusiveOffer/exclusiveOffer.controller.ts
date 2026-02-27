@@ -13,12 +13,14 @@ const create = catchAsync(async (req: Request, res: Response) => {
   const image = getMultipleFilesPath(req.files, 'image');
   const { user: bodyUser, ...rest } = req.body;
 
+  const isPartner = req.user?.role === USER_ROLES.PARTNER;
+
   const data = {
     ...rest,
     ...(image ? { image } : {}),
-    user: bodyUser ?? req.user?.id,
-    status: req.user?.role === USER_ROLES.ADMIN ? "approved" : "pending",
-    published: req.user?.role === USER_ROLES.PARTNER ? false : true
+    user: isPartner ? req.user?.id : bodyUser,
+    status: isPartner ? "pending" : "approved",
+    published: isPartner ? false : true,
   };
 
   const result = await ExclusiveOfferService.createToDB(data);
@@ -72,6 +74,7 @@ const getMyOffers = catchAsync(async (req: Request, res: Response) => {
 const getById = catchAsync(async (req: Request, res: Response) => {
   const result = await ExclusiveOfferService.getByIdFromDB(
     req.params?.id as string,
+    req?.user?.id
   );
 
   sendResponse(res, {

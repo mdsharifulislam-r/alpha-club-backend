@@ -17,6 +17,7 @@ import { NotificationCount } from '../notification/notificationCountModel';
 import { USER_ROLES } from '../../../enums/user';
 import admin from '../../../helpers/firebaseConfig';
 import { UserProfileUpdateRequest } from './user.profileUpdateRequest';
+import { PartnerRequest } from '../partnerRequest/partnerRequest.model';
 
 const createUserToDB = async (
   payload: Partial<IUser>
@@ -312,6 +313,50 @@ const getAllUsers = async (query: Record<string, any>, userId: string) => {
   };
 };
 
+const getAllPartnersUsers = async (
+  query: Record<string, any>,
+  userId: string
+) => {
+  const qb = new QueryBuilder(
+    User.find({
+      _id: { $ne: userId },
+      role: USER_ROLES.PARTNER,
+    }),
+    query
+  )
+    .paginate()
+    .search(userSearchableField)
+    .fields()
+    .filter()
+    .sort();
+
+  // ✅ Execute query
+  const users = await qb.modelQuery.lean();
+
+  // ✅ Add partnerShipId to each user
+  const data = await Promise.all(
+    users.map(async (user: any) => {
+      const partner = await PartnerRequest.findOne({
+        contactEmail: user.email,
+      }).select("partnerShipId");
+
+      return {
+        name: user.name,
+        _id: user._id,
+        email: user.email,
+        partnerShipId: partner?.partnerShipId || null,
+      };
+    })
+  );
+
+  const pagination = await qb.getPaginationInfo();
+
+  return {
+    pagination,
+    data,
+  };
+};
+
 const getProfile = async (userId: string) => {
   const user = await User.findOne({ _id: userId })
     .populate({ path: 'application_form' })
@@ -466,4 +511,5 @@ export const UserService = {
   updateSingleUserToDB,
   sendNotificationToUsers,
   approvePendingUser,
+  getAllPartnersUsers
 };

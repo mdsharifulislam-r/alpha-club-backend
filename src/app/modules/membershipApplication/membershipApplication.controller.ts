@@ -66,7 +66,13 @@ const getById = catchAsync(async (req: Request, res: Response) => {
 
 const update = catchAsync(async (req: Request, res: Response) => {
   const id = (req.params as any)?.id;
-  const result = await MemberShipApplicationService.updateInDB(id, req.body);
+  const profileImage = getSingleFilePath(req.files, 'profileImage');
+
+  const data = {
+    ...req.body,
+    ...(profileImage && { profileImage }),
+  }
+  const result = await MemberShipApplicationService.updateInDB(id, data);
 
   sendResponse(res, {
     success: true,
