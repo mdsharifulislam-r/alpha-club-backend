@@ -212,6 +212,79 @@ const createToDB = async (payload: IMemberShipApplication) => {
   return await MemberShipApplication.create(payload);
 };
 
+const createApplicationByAdmin = async (payload: IMemberShipApplication) => {
+  // Check membership plan
+  const plan = await MemberShipPlan.findOne({
+    membershipType: payload.membershipType,
+  });
+
+  if (!plan) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      `Membership type "${payload.membershipType}" not found`
+    );
+  }
+
+  // Handle family members
+  if (!plan.familyMembershipOptions?.enableFamilyMembers && payload.familyMembers?.length) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      `Family membership is not enabled for this plan.`
+    );
+  }
+
+  // Duplicate check by phone
+  const phoneExists = await MemberShipApplication.findOne({
+    phone: payload.phone,
+    membershipStatus: { $in: [MembershipStatus.PENDING, MembershipStatus.ACTIVE] },
+  });
+  if (phoneExists) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, `You already applied with this phone number`);
+  }
+
+  // Duplicate check by email
+  const emailExists = await MemberShipApplication.findOne({
+    email: payload.email,
+    membershipStatus: { $in: [MembershipStatus.PENDING, MembershipStatus.ACTIVE] },
+  });
+  if (emailExists) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, `You already applied with this email`);
+  }
+
+  // Set default status
+  payload.membershipStatus = MembershipStatus.ACTIVE;
+
+  // Expiry date → 4 years
+  const expiryDate = new Date();
+  expiryDate.setFullYear(expiryDate.getFullYear() + 4);
+  payload.expireId = expiryDate;
+
+  const application = await MemberShipApplication.create(payload);
+
+  const randomPassword = generateRandomPassword(12);
+  await User.create({
+    name: payload.name,
+    email: payload.email,
+    phone: payload.phone,
+    password: randomPassword,
+    profileImage: payload.profileImage,
+    verified: true,
+    application_form: application._id,
+  });
+
+  // 📧 Send approval email
+  const emailData = emailTemplate.membershipApproved({
+    email: application.email,
+    name: application.name,
+    password: randomPassword,
+    memberShipId: application.memberShipId || '',
+    phone: application.phone,
+  });
+
+  await emailHelper.sendEmail(emailData);
+
+  return application;
+};
 const getAllFromDB = async (query: Record<string, any>) => {
   const qb = new QueryBuilder(MemberShipApplication.find(), query)
     .paginate()
@@ -397,12 +470,12 @@ const updateInDB = async (
     runValidators: true,
   }).lean();
 
-  if(payload.profileImage){
-     await User.findOneAndUpdate(
-       { application_form: id },
-       { $set: { profileImage: payload.profileImage } },
-       { new: true, runValidators: true }
-     )
+  if (payload.profileImage) {
+    await User.findOneAndUpdate(
+      { application_form: id },
+      { $set: { profileImage: payload.profileImage } },
+      { new: true, runValidators: true }
+    )
   }
 
   if (!updated) {
@@ -432,4 +505,5 @@ export const MemberShipApplicationService = {
   getByIdFromDB,
   updateInDB,
   deleteFromDB,
+  createApplicationByAdmin
 };

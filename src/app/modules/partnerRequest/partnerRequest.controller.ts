@@ -5,17 +5,24 @@ import sendResponse from '../../../shared/sendResponse';
 import mongoose from 'mongoose';
 import { getSingleFilePath } from '../../../shared/getFilePath';
 import { PartnerRequestService } from './partnerRequest.service';
+import { USER_ROLES } from '../../../enums/user';
 
 const create = catchAsync(async (req: Request, res: Response) => {
 
   const profileImage = getSingleFilePath(req.files, 'profileImage');
 
-   const data = {
-      ...req.body,
-      profileImage
-   }
-   console.log(req.file)
-  const result = await PartnerRequestService.createToDB(data);
+  const data = {
+    ...req.body,
+    profileImage
+  }
+  console.log(req.file)
+  let result;
+
+  if (req.user?.role === USER_ROLES.PARTNER || req.user?.role === USER_ROLES.USER) {
+    result = await PartnerRequestService.createToDB(data);
+  } else {
+    result = await PartnerRequestService.createByAdminToDB(data);
+  }
 
   sendResponse(res, {
     success: true,

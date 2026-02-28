@@ -11,7 +11,7 @@ const partnerShipApplicationSchema = new Schema<IPartnerRequest, PartnerRequestM
       trim: true,
     },
     companyName: { type: String, required: true, trim: true },
-    profileImage: { type: String, required: true, trim: true },
+    profileImage: { type: String, default: 'https://i.ibb.co/z5YHLV9/profile.png', trim: true },
     industry: { type: String, required: true, trim: true },
     contactName: { type: String, required: true, trim: true },
     contactEmail: { type: String, required: true, trim: true },

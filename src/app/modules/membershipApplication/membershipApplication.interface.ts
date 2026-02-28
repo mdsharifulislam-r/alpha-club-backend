@@ -19,7 +19,7 @@ export type IMemberShipApplication = {
 
   membershipStatus: MembershipStatus;
   expireId?: Date;   // new field for separate expiry date
-  
+
   // Extra fields
   jobTitle?: string;
   organizationName?: string;
@@ -38,6 +38,18 @@ export type IMemberShipApplication = {
   confirmAcknowledgement?: boolean;
   confirmAgreement?: boolean;
 
+  family?: {
+    spouse?: {
+      name?: string;
+      dob?: Date;
+      email?: string;
+      phone?: string;
+    };
+    children?: {
+      name?: string;
+      age?: number;
+    }[];
+  };
   createdAt?: Date;
   updatedAt?: Date;
 };

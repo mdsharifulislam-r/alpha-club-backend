@@ -82,7 +82,59 @@ const createToDB = async (payload: IPartnerRequest) => {
   return application;
 };
 
+const createByAdminToDB = async (payload: IPartnerRequest) => {
+  // 🔎 Check existing email & phone
+  const [isEmailExist, isPhoneExist] = await Promise.all([
+    PartnerRequest.exists({ contactEmail: payload.contactEmail }),
+    PartnerRequest.exists({ contactPhone: payload.contactPhone }),
+  ]);
 
+  if (isEmailExist) {
+    throw new ApiError(
+      StatusCodes.CONFLICT,
+      'Application already exists with this email'
+    );
+  }
+
+  if (isPhoneExist) {
+    throw new ApiError(
+      StatusCodes.CONFLICT,
+      'Application already exists with this phone number'
+    );
+  }
+
+  payload.partnerShipStatus = PartnerShipStatus.ACTIVE;
+
+  // ✅ Create Application First
+  const application = await PartnerRequest.create(payload);
+
+  // 🔵 Create new user
+  const randomPassword = generateRandomPassword(12);
+
+  await User.create({
+    profileImage: application.profileImage,
+    name: application.contactName,
+    email: application.contactEmail,
+    phone: application.contactPhone,
+    password: randomPassword,
+    verified: true,
+    role: USER_ROLES.PARTNER
+  });
+
+  // 📧 Send approval email only for new user
+  const emailData = emailTemplate.partnerApproved({
+    email: application.contactEmail,
+    companyName: application.companyName,
+    partnerShipId: application.partnerShipId || '',
+    contactName: application.contactName,
+    password: randomPassword, // optional if needed in template
+  });
+
+  emailHelper.sendEmail(emailData);
+
+
+  return application;
+};
 
 const getAllFromDB = async (query: Record<string, any>) => {
   const qb = new QueryBuilder(PartnerRequest.find(), query)
@@ -110,6 +162,7 @@ const updateInDB = async (
   id: mongoose.Types.ObjectId,
   payload: Partial<IPartnerRequest>
 ) => {
+
   const application = await PartnerRequest.findById(id).lean();
 
   if (!application) {
@@ -122,21 +175,29 @@ const updateInDB = async (
   const previousStatus = application.partnerShipStatus;
   const newStatus = payload.partnerShipStatus;
 
-  console.log({
-    previousStatus,
-    newStatus
+  console.log('application', application);
+  // 🔍 Check if user already exists
+  let existingUser = await User.findOne({
+    $or: [
+      { email: application.contactEmail },
+      { phone: application.contactPhone },
+    ],
   });
+
+  if (existingUser) {
+    // 🔵 Update user
+    await User.updateOne(
+      { _id: existingUser._id },
+      {
+        $set: {
+          name: payload.contactName,
+        },
+      }
+    );
+  }
 
   // ✅ If status is being changed to ACTIVE
   if (newStatus === PartnerShipStatus.ACTIVE && previousStatus !== PartnerShipStatus.ACTIVE) {
-    // 🔍 Check if user already exists
-    let existingUser = await User.findOne({
-      $or: [
-        { email: application.contactEmail },
-        { phone: application.contactPhone },
-      ],
-    });
-
     if (!existingUser) {
       // 🔵 Create new user
       const randomPassword = generateRandomPassword(12);
@@ -208,4 +269,5 @@ export const PartnerRequestService = {
   getByIdFromDB,
   updateInDB,
   deleteFromDB,
+  createByAdminToDB
 };

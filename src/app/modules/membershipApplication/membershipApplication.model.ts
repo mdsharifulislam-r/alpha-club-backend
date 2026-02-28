@@ -87,7 +87,20 @@ const memberShipApplicationSchema = new Schema<IMemberShipApplication, MemberShi
     logo: { type: [String] }, // array of string
     confirmAcknowledgement: { type: Boolean },
     confirmAgreement: { type: Boolean },
-
+    family: {
+      spouse: {
+        name: { type: String },
+        dob: { type: Date },
+        email: { type: String },
+        phone: { type: String },
+      },
+      children: [
+        {
+          name: { type: String },
+          age: { type: Number },
+        },
+      ],
+    }
   },
   { timestamps: true }
 );

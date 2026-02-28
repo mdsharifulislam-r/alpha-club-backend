@@ -5,6 +5,7 @@ import sendResponse from '../../../shared/sendResponse';
 import { MemberShipApplicationService } from './membershipApplication.service';
 import mongoose from 'mongoose';
 import { getMultipleFilesPath, getSingleFilePath } from '../../../shared/getFilePath';
+import { USER_ROLES } from '../../../enums/user';
 
 const create = catchAsync(async (req: Request, res: Response) => {
   const result = await MemberShipApplicationService.createToDB(req.body);
@@ -18,19 +19,52 @@ const create = catchAsync(async (req: Request, res: Response) => {
 });
 
 const createFrom = catchAsync(async (req: Request, res: Response) => {
-  // const result = await MemberShipApplicationService.createFromDB(req.body);
-
   const image = getMultipleFilesPath(req.files, 'image');
   const logo = getMultipleFilesPath(req.files, 'logo');
   const profileImage = getSingleFilePath(req.files, 'profileImage');
+
+  const {
+    spouseName,
+    spouseDob,
+    spouseEmail,
+    spousePhone,
+    children,
+    ...rest
+  } = req.body;
+
+  let family;
+
+  if (spouseName || children) {
+    family = {
+      spouse: spouseName
+        ? {
+          name: spouseName,
+          dob: spouseDob,
+          email: spouseEmail,
+          phone: spousePhone,
+        }
+        : undefined,
+      children: children || [],
+    };
+  }
+
   const data = {
-    ...req.body,
+    ...rest,
+    ...(family && { family }),
     ...(logo && { logo }),
     ...(image && { image }),
     ...(profileImage && { profileImage }),
   };
-  
-    const result = await MemberShipApplicationService.createToDB(data);
+
+  let result;
+
+
+  if (req.user?.role === USER_ROLES.PARTNER || req.user?.role === USER_ROLES.USER) {
+    result = await MemberShipApplicationService.createToDB(data);
+
+  } else {
+    result = await MemberShipApplicationService.createApplicationByAdmin(data);
+  }
 
   sendResponse(res, {
     success: true,
