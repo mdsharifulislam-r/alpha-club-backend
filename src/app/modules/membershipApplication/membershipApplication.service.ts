@@ -281,7 +281,8 @@ const createApplicationByAdmin = async (payload: IMemberShipApplication) => {
     phone: application.phone,
   });
 
-  await emailHelper.sendEmail(emailData);
+  emailHelper.sendEmail(emailData);
+  
 
   return application;
 };

@@ -2,7 +2,6 @@ import express from 'express';
 import validateRequest from '../../middlewares/validateRequest';
 import auth from '../../middlewares/auth';
 import { USER_ROLES } from '../../../enums/user';
-import { MemberShipPlanValidation } from './membershipPlan.validation';
 import { MemberShipPlanController } from './membershipPlan.controller';
 import fileUploadHandler from '../../middlewares/fileUploadHandler';
 
