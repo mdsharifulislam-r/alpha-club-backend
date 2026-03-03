@@ -12,29 +12,52 @@ import { ExclusiveOffer } from '../exclusiveOffer/exclusiveOffer.model';
  * Create Redemption
  */
 const createToDB = async (payload: ImemberRedemption) => {
-  // Check if the user exists
-  const isExistUser = await User.findOne({ application_form: payload.user });
+  // Start and end of today using dayjs
+  const startOfDay = dayjs().startOf('day').toDate();
+  const endOfDay = dayjs().endOf('day').toDate();
+
+  // 🔹 Check if user exists
+  const isExistUser = await User.findOne({
+    application_form: payload.user,
+  });
+
   if (!isExistUser) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "User doesn't exist!"
+    );
   }
 
+  // Replace payload.user with actual ObjectId
   payload.user = isExistUser._id as any;
 
-  // 🔹 Check if redemption already exists for today
-  // const startOfDay = dayjs().startOf('day').toDate();
-  // const endOfDay = dayjs().endOf('day').toDate();
-
+  // 🔹 Check if redemption already exists today
   const existing = await MemberRedemption.findOne({
     user: isExistUser._id,
-    // date: {
-    //   $gte: startOfDay,
-    //   $lte: endOfDay,
-    // },
+    date: {
+      $gte: startOfDay,
+      $lte: endOfDay,
+    },
   });
 
   if (existing) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, 'Redemption already exists for this member');
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "Redemption already marked for today"
+    );
   }
+
+  const hasLimit50 = await MemberRedemption.countDocuments({
+    date: {
+      $gte: startOfDay,
+      $lte: endOfDay,
+    },
+  });
+
+  if (hasLimit50 >= 50) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'You have reached 50 redemptions for today');
+  }
+
 
   // Force today's date
   payload.date = dayjs().toDate();
@@ -146,9 +169,9 @@ const redemptionOverview = async (userId: string) => {
   });
 
   const active_offer = await ExclusiveOffer.countDocuments({
-    user:userId,
-    status:"approved",
-    published:true
+    user: userId,
+    status: "approved",
+    published: true
   })
 
   return {
@@ -160,6 +183,27 @@ const redemptionOverview = async (userId: string) => {
 };
 
 
+const overViewRedemption = async (userId: string) => {
+  const startOfDay = dayjs().startOf('day').toDate();
+  const endOfDay = dayjs().endOf('day').toDate();
+
+  const checkIn = await MemberRedemption.countDocuments({
+    creator: userId,
+    date: {
+      $gte: startOfDay,
+      $lte: endOfDay,
+    },
+  });
+  
+  const remaining = 50 - checkIn;
+  const result = {
+    checkIn,
+    remaining
+  };
+
+ return result;
+};
+
 export const MemberRedemptionService = {
   createToDB,
   getAllFromDB,
@@ -167,4 +211,5 @@ export const MemberRedemptionService = {
   updateInDB,
   deleteFromDB,
   redemptionOverview,
+  overViewRedemption
 };

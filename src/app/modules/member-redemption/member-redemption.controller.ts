@@ -97,11 +97,23 @@ const redemptionOverview = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const overViewRedemption = catchAsync(async (req: Request, res: Response) => {
+  const result = await MemberRedemptionService.overViewRedemption(req?.user?.id);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'Attendance overview retrieved successfully',
+    data: result,
+  });
+});
+
 export const MemberRedemptionController = {
   create,
   getAll,
   getById,
   update,
   remove,
-  redemptionOverview
+  redemptionOverview,
+  overViewRedemption
 };

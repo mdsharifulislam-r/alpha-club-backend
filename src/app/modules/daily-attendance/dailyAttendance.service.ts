@@ -5,8 +5,6 @@ import { DailyAttendance } from './daily-attendance.model';
 import { IDailyAttendance } from './daily-attendance.interface';
 import dayjs from 'dayjs';
 import { User } from '../user/user.model';
-import mongoose, { ObjectId } from 'mongoose';
-
 /**
  * Create Attendance
  */

@@ -24,6 +24,7 @@ router.get(
   MemberRedemptionController.redemptionOverview
 );
 
+router.get('/overvie/redemption', auth(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN, USER_ROLES.PARTNER), MemberRedemptionController.overViewRedemption);
 // 🔹 Get / Update / Delete by ID
 router
   .route('/:id')

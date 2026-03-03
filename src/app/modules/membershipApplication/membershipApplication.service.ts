@@ -213,6 +213,8 @@ const createToDB = async (payload: IMemberShipApplication) => {
 };
 
 const createApplicationByAdmin = async (payload: IMemberShipApplication) => {
+
+  console.log('payload:', payload)
   // Check membership plan
   const plan = await MemberShipPlan.findOne({
     membershipType: payload.membershipType,
@@ -282,7 +284,7 @@ const createApplicationByAdmin = async (payload: IMemberShipApplication) => {
   });
 
   emailHelper.sendEmail(emailData);
-  
+
 
   return application;
 };
@@ -471,12 +473,18 @@ const updateInDB = async (
     runValidators: true,
   }).lean();
 
-  if (payload.profileImage) {
+  const updateData: any = {};
+
+  // Only add fields if they are not null or undefined
+  if (payload.profileImage) updateData.profileImage = payload.profileImage;
+  if (payload.name) updateData.name = payload.name;
+
+  if (Object.keys(updateData).length > 0) {
     await User.findOneAndUpdate(
       { application_form: id },
-      { $set: { profileImage: payload.profileImage } },
+      { $set: updateData },
       { new: true, runValidators: true }
-    )
+    );
   }
 
   if (!updated) {
