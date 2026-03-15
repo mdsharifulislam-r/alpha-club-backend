@@ -23,7 +23,7 @@ const create = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAll = catchAsync(async (req: Request, res: Response) => {
-  const result = await EventService.getAllFromDB(req.query);
+  const result = await EventService.getAllFromDB(req.query ,req?.user?.id);
   
   sendResponse(res, {
     success: true,

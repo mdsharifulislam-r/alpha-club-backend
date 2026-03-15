@@ -130,6 +130,22 @@ const changePassword = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const memberLoginUser = catchAsync(async (req: Request, res: Response) => {
+  const { ...loginData } = req.body;
+  const result = await AuthService.memberloginUserFromDB(loginData, res);
+  const cookieOptions = {
+    secure: config.node_env === 'production',
+    httpOnly: true,
+  };
+  res.cookie('token', result.createToken, cookieOptions);
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'Member logged in successfully.',
+    data: { token: result.createToken },
+  });
+});
+
 export const AuthController = {
   verifyOtp,
   verifyResetOtp,
@@ -140,5 +156,6 @@ export const AuthController = {
   resendOTPtoDB,
   changePassword,
   adminLoginUser,
-  renualRequest
+  renualRequest,
+  memberLoginUser
 };

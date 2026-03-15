@@ -336,13 +336,6 @@ const partnerloginUserFromDB = async (payload: ILoginData , res: Response) => {
     config.jwt.jwt_expire_in as string
   );
 
-  // set cookie
-  // res.cookie('token', createToken, {
-  //   httpOnly: true,
-  //   secure: true,
-  //   path: "/",
-  //   maxAge: 60 * 60 * 24 * 7, // 7 days
-  // });
 
   return { createToken };
 };
@@ -508,6 +501,45 @@ const renualRequestToDB = async (phone: string) => {
 
 };
 
+const memberloginUserFromDB = async (payload: ILoginData , res: Response) => {
+  const { email, password } = payload;
+  const isExistUser = await User.findOne({ email }).select('+password');
+
+  if (!isExistUser ) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  }
+
+  if (isExistUser.role !== USER_ROLES.USER) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'You don’t have permission to access member dashboard.');
+  }
+
+
+  //check user status
+  if (isExistUser.status === 'block') {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'You don’t have permission to access this content.It looks like your account has been blocked.'
+    );
+  }
+
+  //check match password
+  if (
+    password &&
+    !(await User.isMatchPassword(password, isExistUser.password))
+  ) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Password is incorrect!');
+  }
+
+  //create token
+  const createToken = jwtHelper.createToken(
+    { id: isExistUser._id, role: isExistUser.role },
+    config.jwt.jwt_secret as Secret,
+    config.jwt.jwt_expire_in as string
+  );
+
+
+  return { createToken };
+};
 export const AuthService = {
   adminloginUserFromDB,
   forgetPasswordToDB,
@@ -518,6 +550,7 @@ export const AuthService = {
   verifyOTPToDB,
   verifyResetOtp,
   changePasswordToDB,
-  renualRequestToDB
+  renualRequestToDB,
+  memberloginUserFromDB
 
 };

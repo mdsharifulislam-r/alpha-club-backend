@@ -20,6 +20,8 @@ router.post(
 
 router.post('/partner-login', AuthController.partnerLoginUser);
 
+router.post('/member-login', AuthController.memberLoginUser);
+
 router.post(
   '/resend-otp',
   validateRequest(AuthValidation.createResendOTPZodSchema),

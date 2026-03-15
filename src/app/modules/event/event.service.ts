@@ -9,42 +9,110 @@ const createToDB = async (payload: IEvent) => {
   return await Event.create(payload);
 };
 
-const getAllFromDB = async (query: Record<string, any>) => {
-  // By default, override any external sort with eventDate ASC (nearest future first)
+// const getAllFromDB = async (query: Record<string, any>) => {
+//   // By default, override any external sort with eventDate ASC (nearest future first)
+//   const updatedQuery = {
+//     ...query,
+//     // sortBy: 'eventDate',
+//     // sortOrder: 'desc',
+//   };
+
+//   const qb = new QueryBuilder(Event.find(), updatedQuery)
+//     .paginate()
+//     .search(['name', 'title', 'location'])
+//     .fields()
+//     .filter()
+//     .sort();
+
+//   // Get events and pagination
+//   const data = await qb.modelQuery.lean();
+//   const pagination = await qb.getPaginationInfo();
+
+//   // For each event, count registrations and add eventCount
+//   const dataWithCount = await Promise.all(
+//     data.map(async (event: any) => {
+//       const eventCount = await EventRegistration.countDocuments({ event: event._id });
+//       return {
+//         ...event,
+//         eventCount,
+//       };
+//     })
+//   );
+
+//   return {
+//     pagination,
+//     data: dataWithCount,
+//   };
+// };
+const getAllFromDB = async (query: Record<string, any>, userId: string) => {
   const updatedQuery = {
     ...query,
-    // sortBy: 'eventDate',
-    // sortOrder: 'desc',
   };
 
   const qb = new QueryBuilder(Event.find(), updatedQuery)
     .paginate()
-    .search(['name', 'title', 'location'])
+    .search(['name', 'title', 'location' ])
     .fields()
-    .filter()
+    .filter(['status'])
     .sort();
 
-  // Get events and pagination
   const data = await qb.modelQuery.lean();
   const pagination = await qb.getPaginationInfo();
+  console.log(data,userId)
 
-  // For each event, count registrations and add eventCount
-  const dataWithCount = await Promise.all(
+  const dataWithExtra = await Promise.all(
     data.map(async (event: any) => {
-      const eventCount = await EventRegistration.countDocuments({ event: event._id });
+
+      const eventCount = await EventRegistration.countDocuments({
+        event: event._id,
+      });
+
+      const existingRegistration = await EventRegistration.findOne({
+        event: event._id,
+        user: userId,
+      }).lean();
+
+      let joinStatus = existingRegistration
+        ? existingRegistration.status
+        : 'ongoing';
+
+      if (event.eventDate) {
+        const eventDate = new Date(event.eventDate);
+        const now = new Date();
+
+        const eventYMD = new Date(
+          eventDate.getFullYear(),
+          eventDate.getMonth(),
+          eventDate.getDate()
+        );
+
+        const nowYMD = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate()
+        );
+
+        if (
+          eventYMD < nowYMD &&
+          (!existingRegistration || joinStatus === 'ongoing')
+        ) {
+          joinStatus = 'time_exceeded';
+        }
+      }
+
       return {
         ...event,
         eventCount,
+        joinStatus,
       };
     })
   );
 
   return {
     pagination,
-    data: dataWithCount,
+    data: dataWithExtra,
   };
 };
-
 const getByIdFromDB = async (id: string) => {
   const event = await Event.findById(id).lean();
 

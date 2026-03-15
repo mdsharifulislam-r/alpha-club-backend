@@ -25,8 +25,10 @@ const createToDB = async (payload: IEventRegistration) => {
     throw new ApiError(StatusCodes.CONFLICT, 'User has already registered for this event');
   }
 
+
   // Create the registration
   const registration = await EventRegistration.create(payload);
+  await EventRegistration.updateOne({ _id: registration._id }, { $set: { status: EventRegistrationStatus.PENDING } });
 
   // 🔔 Notification to all admins
   try {

@@ -20,6 +20,8 @@ import { ContactUsRoutes } from '../app/modules/contactUs/contactUs.route';
 import { PartnerRequestRoutes } from '../app/modules/partnerRequest/partnerRequest.route';
 import { DailyAttendanceRoutes } from '../app/modules/daily-attendance/daily-attendance.route';
 import { MemberRedemptionRoutes } from '../app/modules/member-redemption/member-redemption.route';
+import { TeamContactRoutes } from '../app/modules/teamContact/teamContact.route';
+import { FeedbackRoutes } from '../app/modules/feedback/feedback.route';
 const router = express.Router();
 
 const apiRoutes = [
@@ -96,16 +98,24 @@ const apiRoutes = [
     route: ContactUsRoutes,
   },
   {
-    path:'/partner-request',
+    path: '/partner-request',
     route: PartnerRequestRoutes
   },
   {
-    path:'/attendance',
-    route:DailyAttendanceRoutes
+    path: '/attendance',
+    route: DailyAttendanceRoutes
   },
   {
-    path:'/redemption',
+    path: '/redemption',
     route: MemberRedemptionRoutes
+  }, 
+  {
+    path: '/team-contact',
+    route: TeamContactRoutes,
+  },
+  {
+    path: '/feedback',
+    route: FeedbackRoutes
   }
 ];
 
