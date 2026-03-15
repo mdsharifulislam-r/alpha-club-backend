@@ -214,7 +214,6 @@ const createToDB = async (payload: IMemberShipApplication) => {
 
 const createApplicationByAdmin = async (payload: IMemberShipApplication) => {
 
-  console.log('payload:', payload)
   // Check membership plan
   const plan = await MemberShipPlan.findOne({
     membershipType: payload.membershipType,

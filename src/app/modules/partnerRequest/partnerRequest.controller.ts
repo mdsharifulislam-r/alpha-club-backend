@@ -15,7 +15,6 @@ const create = catchAsync(async (req: Request, res: Response) => {
     ...req.body,
     profileImage
   }
-  console.log(req.file)
   let result;
 
   if (req.user?.role === USER_ROLES.PARTNER || req.user?.role === USER_ROLES.USER) {
@@ -43,7 +42,6 @@ const createFrom = catchAsync(async (req: Request, res: Response) => {
     ...(image && { image }),
   };
 
-  console.log(data);
   const result = await PartnerRequestService.createToDB(data);
 
   sendResponse(res, {

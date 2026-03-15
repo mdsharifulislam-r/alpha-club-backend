@@ -178,7 +178,6 @@ const createToDB = async (payload: IContactForm) => {
 
 const createFormToDB = async (payload: IContactForm) => {
   // 🔴 Check email duplicate in ContactForm
-  console.log(payload);
   const emailExists = await ContactForm.findOne({
     email: payload.email,
   });

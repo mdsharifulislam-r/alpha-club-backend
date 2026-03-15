@@ -18,7 +18,6 @@ const createToDB = async (payload: IDailyAttendance) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
 
-  console.log('isExistUser', isExistUser)
    payload.user = isExistUser._id as any;
   // Check if attendance already marked today
   const existing = await DailyAttendance.findOne({

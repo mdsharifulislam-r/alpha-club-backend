@@ -58,7 +58,6 @@ const getAllFromDB = async (query: Record<string, any>, userId: string) => {
 
   const data = await qb.modelQuery.lean();
   const pagination = await qb.getPaginationInfo();
-  console.log(data,userId)
 
   const dataWithExtra = await Promise.all(
     data.map(async (event: any) => {
