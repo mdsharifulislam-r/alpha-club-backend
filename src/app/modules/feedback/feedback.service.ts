@@ -23,7 +23,7 @@ const getAllFeedbacks = async (query: Record<string, any>) => {
     .sort()
     .fields();
 
-  const data = await qb.modelQuery.lean();
+  const data = await qb.modelQuery.lean().populate("partner", "name email");
   const pagination = await qb.getPaginationInfo();
 
   return { data, pagination };
