@@ -13,8 +13,7 @@ const exclusiveOfferSchema = new Schema<IExclusiveOffer, ExclusiveOfferModel>(
     },
     user: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
+      ref: 'User'
     },
     title: {
       type: String,

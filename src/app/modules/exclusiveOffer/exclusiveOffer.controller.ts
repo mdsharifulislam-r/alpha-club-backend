@@ -23,6 +23,7 @@ const create = catchAsync(async (req: Request, res: Response) => {
     published: isPartner ? false : true,
   };
 
+  console.log('DATA', data);
   const result = await ExclusiveOfferService.createToDB(data);
 
   sendResponse(res, {

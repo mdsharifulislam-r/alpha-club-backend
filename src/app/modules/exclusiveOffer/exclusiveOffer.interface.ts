@@ -8,7 +8,7 @@ export type IExclusiveOfferLocation = {
 
 export type IExclusiveOffer = {
   _id?: string;
-  user: Types.ObjectId | IUser;                     // Reference to User
+  user?: Types.ObjectId | IUser;                     // Reference to User
   name: string;                             // Exclusive offer name
   title: string;                            // Exclusive offer title
   location?: IExclusiveOfferLocation;       // GeoJSON location
