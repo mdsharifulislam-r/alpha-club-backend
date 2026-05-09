@@ -20,9 +20,8 @@ import { UserProfileUpdateRequest } from './user.profileUpdateRequest';
 import { PartnerRequest } from '../partnerRequest/partnerRequest.model';
 
 const createUserToDB = async (
-  payload: Partial<IUser>
+  payload: Partial<IUser>,
 ): Promise<{ message: string }> => {
-
   // Check if user already exists by email
   if (!payload.email) {
     throw new ApiError(StatusCodes.BAD_REQUEST, 'Email is required');
@@ -31,7 +30,7 @@ const createUserToDB = async (
   if (isExistUser) {
     throw new ApiError(
       StatusCodes.BAD_REQUEST,
-      'User already exists with this email'
+      'User already exists with this email',
     );
   }
 
@@ -121,7 +120,7 @@ const createUserToDB = async (
 
 const sendNotificationToUsers = async (
   message: string,
-  usersId: string[] = []
+  usersId: string[] = [],
 ) => {
   const users = usersId.length
     ? await User.find({ _id: { $in: usersId }, status: 'active' })
@@ -134,26 +133,66 @@ const sendNotificationToUsers = async (
         .select('fcmToken _id role active')
         .lean()) as IUser[]);
 
-
   // Push notifications
+  // const pushResults = await Promise.allSettled(
+  //   users
+  //     .filter(user => user.fcmToken)
+  //     .map(user =>
+  //       admin.messaging().send({
+  //         token: user.fcmToken!,
+  //         notification: {
+  //           title: 'New Notification',
+  //           body: message,
+  //         },
+  //         data: {
+  //           receiver: String(user._id),
+  //           sender: 'system',
+  //           path: '/notifications',
+  //         },
+  //       })
+  //     )
+  // );
+
   const pushResults = await Promise.allSettled(
     users
       .filter(user => user.fcmToken)
-      .map(user =>
-        admin.messaging().send({
-          token: user.fcmToken!,
-          notification: {
-            title: 'New Notification',
-            body: message,
-          },
-          data: {
-            receiver: String(user._id),
-            sender: 'system',
-            path: '/notifications',
-          },
-        })
-      )
+      .map(async user => {
+        try {
+          await admin.messaging().send({
+            token: user.fcmToken!,
+            notification: {
+              title: 'New Notification',
+              body: message,
+            },
+          });
+
+          return {
+            success: true,
+            userId: user._id,
+          };
+        } catch (error: any) {
+          console.log('FCM Error:', error?.errorInfo);
+
+          // invalid token remove
+          if (
+            error.code === 'messaging/registration-token-not-registered' ||
+            error.code === 'messaging/invalid-registration-token'
+          ) {
+            await User.findByIdAndUpdate(user._id, {
+              $unset: { fcmToken: 1 },
+            });
+          }
+
+          throw error;
+        }
+      }),
   );
+
+  const successfulPushes = pushResults.filter(
+    result => result.status === 'fulfilled',
+  );
+  console.log('pushResults', pushResults);
+  console.log('successfulPushes', successfulPushes.length);
 
   // DB operations (with logging)
   await Promise.allSettled(
@@ -172,18 +211,18 @@ const sendNotificationToUsers = async (
         await NotificationCount.findOneAndUpdate(
           { user: user._id },
           { $inc: { count: 1 } },
-          { new: true, upsert: true }
+          { new: true, upsert: true },
         );
       } catch (err) {
         console.error('Notification DB error for user:', user._id, err);
       }
-    })
+    }),
   );
 };
 
 const updateUserToDB = async (
   userId: string,
-  payload: Partial<IUser>
+  payload: Partial<IUser>,
 ): Promise<IUser | null> => {
   const isExistUser = await User.findById(userId);
   if (!isExistUser) {
@@ -212,7 +251,7 @@ const updateUserToDB = async (
         new: true,
         runValidators: true,
         strict: true,
-      }
+      },
     );
   } else {
     const updateUserRequest = await UserProfileUpdateRequest.findOneAndUpdate(
@@ -223,7 +262,7 @@ const updateUserToDB = async (
         runValidators: true,
         strict: true,
         upsert: true, // 👈 create if not found
-      }
+      },
     );
 
     // 🔔 Notify all admins
@@ -248,7 +287,7 @@ const updateUserToDB = async (
       NotificationCount.findOneAndUpdate(
         { user: admin._id },
         { $inc: { count: 1 } },
-        { new: true, upsert: true }
+        { new: true, upsert: true },
       ).catch(() => {});
     }
   }
@@ -258,9 +297,8 @@ const updateUserToDB = async (
 
 const updateSingleUserToDB = async (
   userId: string,
-  payload: Partial<IUser>
+  payload: Partial<IUser>,
 ): Promise<IUser | null> => {
-
   const isExistUser = await User.findById(userId);
   if (!isExistUser) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
@@ -287,14 +325,17 @@ const updateSingleUserToDB = async (
       new: true,
       runValidators: true,
       strict: true,
-    }
+    },
   );
 
   return updatedUser;
 };
 
 const getAllUsers = async (query: Record<string, any>, userId: string) => {
-  const result = new QueryBuilder(User.find({ _id: { $ne: userId } , role: { $ne: USER_ROLES.SUPER_ADMIN }}), query)
+  const result = new QueryBuilder(
+    User.find({ _id: { $ne: userId }, role: { $ne: USER_ROLES.SUPER_ADMIN } }),
+    query,
+  )
     .paginate()
     .search(userSearchableField)
     .fields()
@@ -315,14 +356,14 @@ const getAllUsers = async (query: Record<string, any>, userId: string) => {
 
 const getAllPartnersUsers = async (
   query: Record<string, any>,
-  userId: string
+  userId: string,
 ) => {
   const qb = new QueryBuilder(
     User.find({
       _id: { $ne: userId },
       role: USER_ROLES.PARTNER,
     }),
-    query
+    query,
   )
     .paginate()
     .search(userSearchableField)
@@ -338,7 +379,7 @@ const getAllPartnersUsers = async (
     users.map(async (user: any) => {
       const partner = await PartnerRequest.findOne({
         contactEmail: user.email,
-      }).select("partnerShipId");
+      }).select('partnerShipId');
 
       return {
         name: user.name,
@@ -346,7 +387,7 @@ const getAllPartnersUsers = async (
         email: user.email,
         partnerShipId: partner?.partnerShipId || null,
       };
-    })
+    }),
   );
 
   const pagination = await qb.getPaginationInfo();
@@ -391,7 +432,7 @@ const approvePendingUser = async (userId: string, status: string) => {
     const user = await User.findOneAndUpdate(
       { _id: userId },
       { $set: updatedInfo },
-      { new: true }
+      { new: true },
     );
 
     if (!user) {
@@ -427,7 +468,7 @@ const approvePendingUser = async (userId: string, status: string) => {
     NotificationCount.findOneAndUpdate(
       { user: userId },
       { $inc: { count: 1 } },
-      { new: true, upsert: true }
+      { new: true, upsert: true },
     ).catch(() => {});
   }
   return updateUserRequest;
@@ -511,5 +552,5 @@ export const UserService = {
   updateSingleUserToDB,
   sendNotificationToUsers,
   approvePendingUser,
-  getAllPartnersUsers
+  getAllPartnersUsers,
 };
