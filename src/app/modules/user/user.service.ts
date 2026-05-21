@@ -543,6 +543,14 @@ const getStatistics = async (year?: string) => {
     userStatistics,
   };
 };
+
+const deleteMyAccount = async (userId: string) => {
+  const user = await User.findOneAndDelete({ _id: userId });
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+  return userId;
+};
 export const UserService = {
   createUserToDB,
   getAllUsers,
@@ -553,4 +561,5 @@ export const UserService = {
   sendNotificationToUsers,
   approvePendingUser,
   getAllPartnersUsers,
+  deleteMyAccount,
 };

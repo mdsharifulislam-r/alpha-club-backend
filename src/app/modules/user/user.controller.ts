@@ -152,6 +152,19 @@ const getAllPartnersUsers = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// DELETE my account
+const deleteMyAccount = catchAsync(async (req: Request, res: Response) => {
+  const result = await UserService.deleteMyAccount(req.user?.id);
+  
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'User account successfully deleted',
+    data: result,
+  });
+});
+
+
 
 export const UserController = {
   updateUser,
@@ -162,5 +175,6 @@ export const UserController = {
   updateSingleUser,
   sendNotificationToUsers,
   approvePendingUser,
-  getAllPartnersUsers
+  getAllPartnersUsers,
+  deleteMyAccount,
 };
