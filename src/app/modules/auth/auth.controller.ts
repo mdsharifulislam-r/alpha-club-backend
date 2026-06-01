@@ -74,6 +74,7 @@ const partnerLoginUser = catchAsync(async (req: Request, res: Response) => {
   const cookieOptions = {
     secure: config.node_env === 'production',
     httpOnly: true,
+    sameSite: config.node_env === 'production' ? 'none' as const : 'lax' as const,
   };
   res.cookie('token', result.createToken , cookieOptions);
   sendResponse(res, {
@@ -136,6 +137,7 @@ const memberLoginUser = catchAsync(async (req: Request, res: Response) => {
   const cookieOptions = {
     secure: config.node_env === 'production',
     httpOnly: true,
+    sameSite: config.node_env === 'production' ? 'none' as const : 'lax' as const,
   };
   res.cookie('token', result.createToken, cookieOptions);
   sendResponse(res, {
