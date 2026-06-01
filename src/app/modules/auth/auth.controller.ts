@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { CookieOptions, Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
@@ -73,8 +73,11 @@ const partnerLoginUser = catchAsync(async (req: Request, res: Response) => {
 
   const cookieOptions = {
     secure: config.node_env === 'production',
-    httpOnly: true
-  };
+    httpOnly: true,
+    sameSite: 'none',
+    domain: '.alphaclubuae.com',
+    path: '/',
+  } as CookieOptions;
   res.cookie('token', result.createToken , cookieOptions);
   sendResponse(res, {
     success: true,
@@ -135,8 +138,11 @@ const memberLoginUser = catchAsync(async (req: Request, res: Response) => {
   const result = await AuthService.memberloginUserFromDB(loginData, res);
   const cookieOptions = {
     secure: config.node_env === 'production',
-    httpOnly: true
-  };
+    httpOnly: true,
+    sameSite: 'none',
+    domain: '.alphaclubuae.com',
+    path: '/',
+  } as CookieOptions;
   res.cookie('token', result.createToken, cookieOptions);
   sendResponse(res, {
     success: true,
