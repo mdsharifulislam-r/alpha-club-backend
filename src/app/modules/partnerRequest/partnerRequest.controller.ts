@@ -17,10 +17,10 @@ const create = catchAsync(async (req: Request, res: Response) => {
   }
   let result;
 
-  if (req.user?.role === USER_ROLES.PARTNER || req.user?.role === USER_ROLES.USER) {
-    result = await PartnerRequestService.createToDB(data);
-  } else {
+  if (req.user?.role === USER_ROLES.ADMIN || req.user?.role === USER_ROLES.SUPER_ADMIN) {
     result = await PartnerRequestService.createByAdminToDB(data);
+  } else {
+    result = await PartnerRequestService.createToDB(data);
   }
 
   sendResponse(res, {
