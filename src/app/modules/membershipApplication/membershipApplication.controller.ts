@@ -59,11 +59,10 @@ const createFrom = catchAsync(async (req: Request, res: Response) => {
   let result;
 
 
-  if (req.user?.role === USER_ROLES.PARTNER || req.user?.role === USER_ROLES.USER) {
-    result = await MemberShipApplicationService.createToDB(data);
-
-  } else {
+  if (req.user?.role === USER_ROLES.ADMIN || req.user?.role === USER_ROLES.SUPER_ADMIN) {
     result = await MemberShipApplicationService.createApplicationByAdmin(data);
+  } else {
+    result = await MemberShipApplicationService.createToDB(data);
   }
 
   sendResponse(res, {
