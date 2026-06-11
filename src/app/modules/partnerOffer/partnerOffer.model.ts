@@ -24,6 +24,9 @@ const partnerOfferSchema = new Schema<IPartnerOffer, PartnerOfferModel>(
       type: String,
       trim: true,
     },
+    businessDescription: {
+      type: String
+    },
     location: {
       type: String,
       trim: true,
