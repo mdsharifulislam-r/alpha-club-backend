@@ -367,6 +367,7 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
         location: 1,
         isFavourite: 1,
         description: 1,
+        businessDescription: 1,
         published: 1,
         status: 1,
         category: {
@@ -399,7 +400,7 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
     };
   } else {
     let modelQuery = ExclusiveOffer.find().select(
-      'name title image discount description location address published status category user'
+      'name title image discount description businessDescription location address published status category user'
     ) as any;
 
     const qb = new QueryBuilder(modelQuery, { ...query })
@@ -550,6 +551,7 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
         title: 1,
         location: 1,
         isFavourite: 1,
+        businessDescription: 1,
         description: 1,
         published: 1,
         status: 1,
