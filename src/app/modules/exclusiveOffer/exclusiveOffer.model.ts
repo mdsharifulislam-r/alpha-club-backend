@@ -46,6 +46,9 @@ const exclusiveOfferSchema = new Schema<IExclusiveOffer, ExclusiveOfferModel>(
       type: String,
       trim: true,
     },
+    businessDescription: {
+      type: String
+    },
     discount: {
       enable: { type: Boolean, default: false },
       value: { type: Number, default: 0 },

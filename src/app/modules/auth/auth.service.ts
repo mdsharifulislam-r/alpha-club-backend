@@ -162,8 +162,8 @@ const verifyResetOtp = async (payload: { email: string, oneTimeCode: number }) =
 
 //login
 const loginUserFromDB = async (payload: ILoginData) => {
-  const { phone, password } = payload;
-  const isExistUser = await User.findOne({ phone }).select('+password');
+  const { email, password } = payload;
+  const isExistUser = await User.findOne({ email }).select('+password');
 
   if (!isExistUser) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");

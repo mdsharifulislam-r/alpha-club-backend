@@ -15,6 +15,7 @@ export type IExclusiveOffer = {
   address?: string;                         // GeoJSON location
   image?: string[];                         // Array of exclusive offer images
   description?: string;                     // Exclusive offer description
+  businessDescription?: string;             // Business description
   category?: Types.ObjectId;                // Reference to Category
   discount?: {
     enable: boolean;
