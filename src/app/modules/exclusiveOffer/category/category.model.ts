@@ -1,8 +1,5 @@
 import { model, Schema } from 'mongoose';
-import {
-  ICategory,
-  CategoryModel,
-} from './category.interface';
+import { ICategory, CategoryModel } from './category.interface';
 
 const categorySchema = new Schema<ICategory, CategoryModel>(
   {
@@ -11,14 +8,29 @@ const categorySchema = new Schema<ICategory, CategoryModel>(
       required: true,
       unique: true,
       trim: true,
-      set: (value: string) => value.toLowerCase(),
+    },
+    slug: {
+      type: String,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
+categorySchema.pre('save', function (next) {
+  this.slug = this.name.toLowerCase().replace(/\s+/g, '-');
+  next();
+});
+
+categorySchema.pre('findOneAndUpdate', function (next) {
+  const update = this.getUpdate() as any;
+
+  if (update?.name) {
+    update.slug = update.name.toLowerCase().replace(/\s+/g, '-');
+  }
+
+  next();
+});
 export const Category = model<ICategory, CategoryModel>(
   'Category',
-  categorySchema
+  categorySchema,
 );
-
