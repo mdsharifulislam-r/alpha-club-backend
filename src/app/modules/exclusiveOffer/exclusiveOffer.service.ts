@@ -584,7 +584,7 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
     };
   } else {
     let modelQuery = ExclusiveOffer.find().select(
-      'name title image discount description location address published status'
+      'name title image discount description businessDescription location address published status'
     ) as any;
 
     const qb = new QueryBuilder(modelQuery, { ...query })
