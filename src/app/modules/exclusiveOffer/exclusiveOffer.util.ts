@@ -34,7 +34,7 @@ export async function getLatLongWithLocalRequest(address: string): Promise<LatLn
       throw new Error(`Failed to parse geocoding response: ${text.substring(0, 100)}`);
     }
   
-    if (!data || !Array.isArray(data) || data.length === 0) throw new Error("Address not found");
+    if (!data || !Array.isArray(data) || data.length === 0) throw new Error("Address is invalid");
   
     return {
       latitude: parseFloat(data[0].lat),

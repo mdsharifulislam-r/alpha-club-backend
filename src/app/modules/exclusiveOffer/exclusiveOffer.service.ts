@@ -655,8 +655,6 @@ const getByIdFromDB = async (id: string, userId: string) => {
 
 
 const updateInDB = async (id: string, payload: Partial<IExclusiveOffer> & { removedFiles?: string[] }) => {
-
-
   // Always get current document images for update logic
   const existing = await ExclusiveOffer.findById(id).select('image').lean();
   let existingImages: string[] = Array.isArray(existing?.image) ? existing.image.map(String) : [];
@@ -668,6 +666,15 @@ const updateInDB = async (id: string, payload: Partial<IExclusiveOffer> & { remo
     existingImages = existingImages.filter(img => !removedFilesSet.has(img));
   }
 
+   if(payload.address){
+    const { latitude, longitude } = await getLatLongWithLocalRequest(
+      String(payload.address)
+    );
+    payload.location = {
+      type: 'Point',
+      coordinates: [longitude, latitude], // [lng, lat]
+    };
+   }
   // Special logic for image updating: append new images if present
   if (payload.hasOwnProperty('image')) {
     let newImages: string[];
