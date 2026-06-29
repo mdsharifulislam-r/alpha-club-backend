@@ -1,4 +1,5 @@
 import { StatusCodes } from 'http-status-codes';
+import { Request, Response } from 'express';
 import ApiError from '../../../errors/ApiError';
 import { emailHelper } from '../../../helpers/emailHelper';
 import { emailTemplate } from '../../../shared/emailTemplate';
@@ -551,6 +552,23 @@ const deleteMyAccount = async (userId: string) => {
   }
   return userId;
 };
+
+const downloadApp = (ua: string, res: Response) => {
+  if (/android/i.test(ua)) {
+    return res.redirect(
+      'https://play.google.com/store/apps/details?id=com.alphaclub.app',
+    );
+  }
+
+  if (/iphone|ipad|ipod/i.test(ua)) {
+    return res.redirect(
+      'https://apps.apple.com/us/app/alpha-club-uae/id6772675462',
+    );
+  }
+
+  // Desktop / Unknown Device
+  return res.redirect('https://alphaclubuae.com');
+};
 export const UserService = {
   createUserToDB,
   getAllUsers,
@@ -562,4 +580,5 @@ export const UserService = {
   approvePendingUser,
   getAllPartnersUsers,
   deleteMyAccount,
+  downloadApp,
 };

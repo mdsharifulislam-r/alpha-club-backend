@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import globalErrorHandler from './app/middlewares/globalErrorHandler';
 import router from './routes';
 import { Morgan } from './shared/morgen';
+import { UserController } from './app/modules/user/user.controller';
 const app = express();
 
 //morgan
@@ -26,6 +27,8 @@ app.use(express.static('uploads'));
 
 //router
 app.use('/api/v1', router);
+//download app by qr code
+app.get('/download', UserController.downloadApp);
 
 //live response
 app.get('/', (req: Request, res: Response) => {

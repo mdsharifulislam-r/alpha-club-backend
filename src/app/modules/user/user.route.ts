@@ -59,5 +59,4 @@ router.post("/push-notification", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN,
 
 router.delete("/delete-my-account", auth(USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.USER), UserController.deleteMyAccount);
 
-
 export const UserRoutes = router;

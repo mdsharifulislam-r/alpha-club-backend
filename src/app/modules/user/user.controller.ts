@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import catchAsync from '../../../shared/catchAsync';
-import { getMultipleFilesPath, getSingleFilePath } from '../../../shared/getFilePath';
+import { getSingleFilePath } from '../../../shared/getFilePath';
 import sendResponse from '../../../shared/sendResponse';
 import { UserService } from './user.service';
 import { USER_ROLES } from '../../../enums/user';
@@ -164,6 +164,13 @@ const deleteMyAccount = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// Download App By QR Code
+const downloadApp = catchAsync((req: Request, res: Response) => {
+  const ua = req.headers['user-agent'] || '';
+  console.log(ua);
+  UserService.downloadApp(ua, res);
+});
+
 
 
 export const UserController = {
@@ -177,4 +184,5 @@ export const UserController = {
   approvePendingUser,
   getAllPartnersUsers,
   deleteMyAccount,
+  downloadApp,
 };
