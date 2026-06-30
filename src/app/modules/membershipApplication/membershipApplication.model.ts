@@ -76,6 +76,7 @@ const memberShipApplicationSchema = new Schema<IMemberShipApplication, MemberShi
     dateOfBirth: { type: Date },
     nationality: { type: String },
     countryOfResidence: { type: String },
+    emirate: { type: String },
     residenceAddress: { type: String },
     industrySector: { type: String },
     yearsOfExperience: { type: Number },

@@ -26,6 +26,7 @@ export type IMemberShipApplication = {
   dateOfBirth?: Date;
   nationality?: string;
   countryOfResidence?: string;
+  emirate?: string;
   residenceAddress?: string;
   industrySector?: string;
   yearsOfExperience?: number;

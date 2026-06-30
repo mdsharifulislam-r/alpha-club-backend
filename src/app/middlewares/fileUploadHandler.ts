@@ -67,6 +67,7 @@ const fileUploadHandler = (fields?: { name: string; maxCount: number }[]) => {
         file.mimetype === 'image/png' ||
         file.mimetype === 'image/jpg' ||
         file.mimetype === 'image/webp' ||
+        file.mimetype === 'image/pdf' ||
         file.mimetype === 'image/gif' ||
         file.mimetype === 'image/bmp'
       ) {
@@ -75,7 +76,7 @@ const fileUploadHandler = (fields?: { name: string; maxCount: number }[]) => {
         cb(
           new ApiError(
             StatusCodes.BAD_REQUEST,
-            'Only .jpeg, .png, .jpg , .webp, .gif, .bmp file supported'
+            'Only .jpeg, .png, .jpg , .webp, .pdf, .gif, .bmp, .mp4, .mp3, .pdf file supported'
           )
         );
       }
@@ -86,7 +87,7 @@ const fileUploadHandler = (fields?: { name: string; maxCount: number }[]) => {
         cb(
           new ApiError(
             StatusCodes.BAD_REQUEST,
-            'Only .mp4, .mp3, file supported'
+            'Only .mp4, .mp3, .pdf file supported'
           )
         );
       }
@@ -94,7 +95,7 @@ const fileUploadHandler = (fields?: { name: string; maxCount: number }[]) => {
       if (file.mimetype === 'application/pdf') {
         cb(null, true);
       } else {
-        cb(new ApiError(StatusCodes.BAD_REQUEST, 'Only pdf supported'));
+        cb(new ApiError(StatusCodes.BAD_REQUEST, 'Only pdf file supported'));
       }
     } else {
       cb(new ApiError(StatusCodes.BAD_REQUEST, 'This file is not supported'));
