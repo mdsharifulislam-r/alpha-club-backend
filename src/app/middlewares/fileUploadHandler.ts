@@ -60,14 +60,14 @@ const fileUploadHandler = (fields?: { name: string; maxCount: number }[]) => {
   });
 
   //file filter
-  const filterFilter = (req: Request, file: any, cb: FileFilterCallback) => {
+  const fileFilter = (req: Request, file: any, cb: FileFilterCallback) => {
     if (file.fieldname === 'image' || file.fieldname === 'profileImage' || file.fieldname === 'logo') {
       if (
         file.mimetype === 'image/jpeg' ||
         file.mimetype === 'image/png' ||
         file.mimetype === 'image/jpg' ||
         file.mimetype === 'image/webp' ||
-        file.mimetype === 'image/pdf' ||
+        file.mimetype === 'application/pdf' ||
         file.mimetype === 'image/gif' ||
         file.mimetype === 'image/bmp'
       ) {
@@ -76,7 +76,7 @@ const fileUploadHandler = (fields?: { name: string; maxCount: number }[]) => {
         cb(
           new ApiError(
             StatusCodes.BAD_REQUEST,
-            'Only .jpeg, .png, .jpg , .webp, .pdf, .gif, .bmp, .mp4, .mp3, .pdf file supported'
+            'Only .jpeg, .png, .jpg, .webp, .pdf, .gif, .bmp file supported'
           )
         );
       }
@@ -104,7 +104,7 @@ const fileUploadHandler = (fields?: { name: string; maxCount: number }[]) => {
 
   const upload = multer({
     storage: storage,
-    fileFilter: filterFilter,
+    fileFilter: fileFilter,
   }).fields(fields || [
     { name: 'profileImage', maxCount: 1 },
     { name: 'image', maxCount: 10 },
