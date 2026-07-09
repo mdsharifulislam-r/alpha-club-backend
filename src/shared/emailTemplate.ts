@@ -152,7 +152,7 @@ const membershipApproved = (values: {
       </p>
 
       <p style="color: #33394d; font-size: 14px; margin: 0 0 8px 0;">
-        <strong>Phone Number:</strong> ${values.phone}
+        <strong>Email:</strong> ${values.email}
       </p>
 
       <div style="margin-top: 10px;">
@@ -167,7 +167,7 @@ const membershipApproved = (values: {
 
     <!-- Instructions -->
     <p style="color: #5071b6; font-size: 14px; margin: 22px 0 0 0; line-height: 1.7;">
-      👉 Use your <strong>phone number</strong> and the password above to log in.<br />
+      👉 Use your <strong>Email</strong> and the password above to log in.<br />
       For your security, please change your password after your first login.
     </p>
 
