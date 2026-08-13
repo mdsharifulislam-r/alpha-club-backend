@@ -9,14 +9,55 @@ import mongoose from 'mongoose';
 import { USER_ROLES } from '../../../enums/user';
 import { OfferView } from '../offerView/offerView.model';
 
-const createToDB = async (payload: IExclusiveOffer) => {
-  const { latitude, longitude } = await getLatLongWithLocalRequest(
-    String(payload.address)
-  );
-  payload.location = {
-    type: 'Point',
-    coordinates: [longitude, latitude], // [lng, lat]
-  };
+const DEFAULT_LOCATION = {
+  type: 'Point' as const,
+  // Dubai approximate centroid — used as a graceful fallback when Nominatim
+  // cannot resolve an address, so the document still saves and the partner
+  // can correct the lat/lng via the edit form afterwards.
+  coordinates: [55.2707828, 25.2048493] as [number, number],
+};
+
+const createToDB = async (
+  payload: IExclusiveOffer & { lat?: number | string; lng?: number | string },
+) => {
+  const { lat, lng } = payload;
+
+  if (lat !== undefined && lng !== undefined && String(lat) !== '' && String(lng) !== '') {
+    const latitude = Number(lat);
+    const longitude = Number(lng);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid lat/lng values');
+    }
+    payload.location = {
+      type: 'Point',
+      coordinates: [longitude, latitude],
+    };
+  } else if (payload.address) {
+    try {
+      const { latitude, longitude } = await getLatLongWithLocalRequest(
+        String(payload.address),
+      );
+      payload.location = {
+        type: 'Point',
+        coordinates: [longitude, latitude],
+      };
+    } catch (err: any) {
+      console.warn(
+        `[ExclusiveOffer] geocoding failed on create, falling back to default Dubai location: ${
+          err?.message ?? err
+        }`,
+      );
+      payload.location = { ...DEFAULT_LOCATION };
+    }
+  } else {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'Either provide lat + lng or a valid address so location can be determined',
+    );
+  }
+
+  delete (payload as any).lat;
+  delete (payload as any).lng;
   return await ExclusiveOffer.create(payload);
 };
 
@@ -272,7 +313,11 @@ const createToDB = async (payload: IExclusiveOffer) => {
 //   return { pagination, data };
 // };
 
-const getAllFromDB = async (query: Record<string, any>, userId: string, role: string) => {
+const getAllFromDB = async (
+  query: Record<string, any>,
+  userId: string,
+  role: string,
+) => {
   const { lat, lng, maxKm, minKm, category } = query;
 
   let data: any[] = [];
@@ -296,9 +341,18 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
       spherical: true,
       ...(maxKm ? { maxDistance: Number(maxKm) * 1000 } : {}),
       ...(minKm ? { minDistance: Number(minKm) * 1000 } : {}),
-      ...(query.published !== undefined ? { query: { published: query.published } } : {}),
-      ...(query.status !== undefined ? { query: { status: query.status } } : {}),
     };
+
+    const geoNearMatchQuery: any = {};
+    if (query.published !== undefined) {
+      geoNearMatchQuery.published = query.published;
+    }
+    if (query.status !== undefined) {
+      geoNearMatchQuery.status = query.status;
+    }
+    if (Object.keys(geoNearMatchQuery).length > 0) {
+      geoNearQuery.query = geoNearMatchQuery;
+    }
 
     const aggregationStages: any[] = [{ $geoNear: geoNearQuery }];
 
@@ -316,7 +370,7 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
           path: '$category',
           preserveNullAndEmptyArrays: true,
         },
-      }
+      },
     );
 
     // Filter by category
@@ -400,7 +454,7 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
     };
   } else {
     let modelQuery = ExclusiveOffer.find().select(
-      'name title image discount description businessDescription location address published status category user'
+      'name title image discount description businessDescription location address published status category user',
     ) as any;
 
     const qb = new QueryBuilder(modelQuery, { ...query })
@@ -422,20 +476,24 @@ const getAllFromDB = async (query: Record<string, any>, userId: string, role: st
         user: userId,
         exclusiveOffer: { $in: offerIds },
       },
-      'exclusiveOffer'
+      'exclusiveOffer',
     ).lean();
 
     const favSet = new Set(favs.map((f: any) => String(f.exclusiveOffer)));
 
     data = data.map((offer: any) => ({
       ...offer,
-      isFavourite: favSet.has(String(offer._id))
+      isFavourite: favSet.has(String(offer._id)),
     }));
   }
 
   return { pagination, data };
 };
-const getMyOffersFromDB = async (query: Record<string, any>, userId: string, role: string) => {
+const getMyOffersFromDB = async (
+  query: Record<string, any>,
+  userId: string,
+  role: string,
+) => {
   const { lat, lng, maxKm, minKm, category } = query;
 
   console.log(query, 'my  -query');
@@ -460,8 +518,15 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
       spherical: true,
       ...(maxKm ? { maxDistance: Number(maxKm) * 1000 } : {}),
       ...(minKm ? { minDistance: Number(minKm) * 1000 } : {}),
-      ...(query.published !== undefined ? { query: { published: query.published } } : {}),
     };
+
+    const geoNearMatchQuery: any = {
+      user: userObjectId,
+    };
+    if (query.published !== undefined) {
+      geoNearMatchQuery.published = query.published;
+    }
+    geoNearQuery.query = geoNearMatchQuery;
 
     const aggregationStages: any[] = [{ $geoNear: geoNearQuery }];
 
@@ -479,7 +544,7 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
           path: '$category',
           preserveNullAndEmptyArrays: true,
         },
-      }
+      },
     );
 
     // Filter by category
@@ -496,7 +561,7 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
     // Views lookup
     aggregationStages.push({
       $lookup: {
-        from: 'offerviews',       // collection name for views
+        from: 'offerviews', // collection name for views
         let: { offerId: '$_id' },
         pipeline: [
           {
@@ -511,7 +576,6 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
         as: 'views', // temporary array
       },
     });
-
 
     // Favourite lookup (FIXED ObjectId comparison)
     aggregationStages.push({
@@ -586,7 +650,7 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
     };
   } else {
     let modelQuery = ExclusiveOffer.find().select(
-      'name title image discount description businessDescription location address published status'
+      'name title image discount description businessDescription location address published status',
     ) as any;
 
     const qb = new QueryBuilder(modelQuery, { ...query })
@@ -606,14 +670,14 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
         user: userId,
         exclusiveOffer: { $in: offerIds },
       },
-      'exclusiveOffer'
+      'exclusiveOffer',
     ).lean();
 
     const favSet = new Set(favs.map((f: any) => String(f.exclusiveOffer)));
     // 1️⃣ Get all view counts grouped by offer
     const offerViews = await OfferView.aggregate([
       { $match: { offer: { $in: offerIds } } },
-      { $group: { _id: "$offer", count: { $sum: 1 } } },
+      { $group: { _id: '$offer', count: { $sum: 1 } } },
     ]);
 
     // 2️⃣ Make a map for easy lookup
@@ -634,11 +698,11 @@ const getMyOffersFromDB = async (query: Record<string, any>, userId: string, rol
 const getByIdFromDB = async (id: string, userId: string) => {
   // Fetch the exclusive offer
   const exclusiveOffer = await ExclusiveOffer.findById(id)
-    .populate("category", "name")
+    .populate('category', 'name')
     .lean();
 
   if (!exclusiveOffer) {
-    throw new ApiError(StatusCodes.NOT_FOUND, "Exclusive offer not found");
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Exclusive offer not found');
   }
 
   if (exclusiveOffer.status === 'approved') {
@@ -646,18 +710,25 @@ const getByIdFromDB = async (id: string, userId: string) => {
     await OfferView.findOneAndUpdate(
       { user: userId, offer: id },
       { $set: { updatedAt: new Date() } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, new: true, setDefaultsOnInsert: true },
     );
   }
 
   return exclusiveOffer;
 };
 
-
-const updateInDB = async (id: string, payload: Partial<IExclusiveOffer> & { removedFiles?: string[] }) => {
-  // Always get current document images for update logic
-  const existing = await ExclusiveOffer.findById(id).select('image').lean();
-  let existingImages: string[] = Array.isArray(existing?.image) ? existing.image.map(String) : [];
+const updateInDB = async (
+  id: string,
+  payload: Partial<IExclusiveOffer> & { removedFiles?: string[]; lat?: number | string; lng?: number | string },
+) => {
+  // Always get current document + current images + current location for update logic
+  const existing = await ExclusiveOffer.findById(id)
+    .select('image location')
+    .lean();
+  let existingImages: string[] = Array.isArray(existing?.image)
+    ? existing.image.map(String)
+    : [];
+  const existingLocation = existing?.location;
 
   // Handle removing files if removedFiles present in payload
   if (Array.isArray(payload.removedFiles) && payload.removedFiles.length > 0) {
@@ -666,15 +737,54 @@ const updateInDB = async (id: string, payload: Partial<IExclusiveOffer> & { remo
     existingImages = existingImages.filter(img => !removedFilesSet.has(img));
   }
 
-   if(payload.address){
-    const { latitude, longitude } = await getLatLongWithLocalRequest(
-      String(payload.address)
-    );
+  const { lat, lng } = payload;
+  const hasLat = lat !== undefined && lat !== '';
+  const hasLng = lng !== undefined && lng !== '';
+
+  if (hasLat || hasLng) {
+    if (!hasLat || !hasLng) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        'Both lat and lng must be provided together when setting coordinates manually',
+      );
+    }
+    const latitude = Number(lat);
+    const longitude = Number(lng);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid lat/lng values');
+    }
     payload.location = {
       type: 'Point',
-      coordinates: [longitude, latitude], // [lng, lat]
+      coordinates: [longitude, latitude],
     };
-   }
+  } else if (payload.address) {
+    try {
+      const { latitude, longitude } = await getLatLongWithLocalRequest(
+        String(payload.address),
+      );
+      payload.location = {
+        type: 'Point',
+        coordinates: [longitude, latitude],
+      };
+    } catch (err: any) {
+      // On update, keep the prior location to avoid silently warping an
+      // existing document to a fallback centroid. Partner can fix the
+      // address or set lat/lng manually and try again.
+      console.warn(
+        `[ExclusiveOffer] geocoding failed on update for id=${id}, preserving existing location: ${
+          err?.message ?? err
+        }`,
+      );
+      if (existingLocation) {
+        payload.location = existingLocation as any;
+      } else if (existingLocation === undefined || existingLocation === null) {
+        // Older doc that never had a location — fall back to default centroid
+        payload.location = { ...DEFAULT_LOCATION };
+      }
+    }
+  }
+  delete (payload as any).lat;
+  delete (payload as any).lng;
   // Special logic for image updating: append new images if present
   if (payload.hasOwnProperty('image')) {
     let newImages: string[];
@@ -689,14 +799,17 @@ const updateInDB = async (id: string, payload: Partial<IExclusiveOffer> & { remo
     if (newImages.length > 0) {
       // Combine existing (possibly filtered if removedFiles used) and new, then dedupe
       const combinedImages = Array.from(
-        new Set([...existingImages, ...newImages])
+        new Set([...existingImages, ...newImages]),
       );
       payload.image = combinedImages;
     } else {
       // If nothing new, just keep current (possibly filtered by removedFiles)
       payload.image = existingImages;
     }
-  } else if (Array.isArray(payload.removedFiles) && payload.removedFiles.length > 0) {
+  } else if (
+    Array.isArray(payload.removedFiles) &&
+    payload.removedFiles.length > 0
+  ) {
     // If only removedFiles was given (not a new image array), update with filtered results
     payload.image = existingImages;
   }
@@ -735,9 +848,8 @@ const createFavourite = async ({
   exclusiveOffer: string;
 }) => {
   // Check if Exclusive Offer exists
-  const exclusiveOfferExists = await ExclusiveOffer.findById(
-    exclusiveOffer
-  ).lean();
+  const exclusiveOfferExists =
+    await ExclusiveOffer.findById(exclusiveOffer).lean();
   if (!exclusiveOfferExists) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Exclusive offer not found');
   }
@@ -762,7 +874,7 @@ const createFavourite = async ({
 
 const getFavouritesFromDB = async (
   userId: string,
-  query: Record<string, any>
+  query: Record<string, any>,
 ) => {
   const qb = new QueryBuilder(
     FavouriteExclusiveOffer.find({ user: userId }).populate({
@@ -773,7 +885,7 @@ const getFavouritesFromDB = async (
       },
       select: 'name title image description location address discount category',
     }),
-    query
+    query,
   )
     .paginate()
     .fields()
@@ -797,5 +909,5 @@ export const ExclusiveOfferService = {
   deleteFromDB,
   createFavourite,
   getFavouritesFromDB,
-  getMyOffersFromDB
+  getMyOffersFromDB,
 };
