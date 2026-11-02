@@ -26,5 +26,7 @@ const storySchema = new Schema<IStory, StoryModel>(
   { timestamps: true }
 );
 
+storySchema.index({ published: 1, createdAt: -1 });
+
 export const Story = model<IStory, StoryModel>('Story', storySchema);
 

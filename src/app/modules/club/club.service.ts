@@ -1,66 +1,50 @@
 import ApiError from '../../../errors/ApiError';
 import { StatusCodes } from 'http-status-codes';
+import { aggregateById, aggregatePage, attachCount } from '../../builder/aggregatePage';
 import QueryBuilder from '../../builder/QueryBuilder';
 import { IClub } from './club.interface';
 import { Club } from './club.model';
 import { ClubMember } from './clubMembers/clubMember.model';
-import mongoose from 'mongoose';
+import { RedisHelper } from '../../../tools/redis/redis.helper';
 
 const createToDB = async (payload: IClub) => {
   if (payload?.limitOfMember)
     payload.limitOfMember = Number(payload.limitOfMember);
 
-  return await Club.create(payload);
+  const club = await Club.create(payload);
+  await RedisHelper.keyDelete(`clubs:*`)
+  await RedisHelper.bust('statistics:*');
+  return club;
 };
 
 const getAllFromDB = async (query: Record<string, any>) => {
-  // Get clubs with member count (only active clubs for public view)
-  const qb = new QueryBuilder(Club.find({ active: true }), query)
-    .paginate()
-    .search(['name', 'location'])
-    .fields()
-    .filter()
-    .sort();
-
-  const clubs = await qb.modelQuery.lean();
-
-  // Get member counts for each club
-  const clubIds = clubs.map((club: any) => club._id);
-  let memberCounts: any[] = [];
-
-  if (clubIds.length > 0) {
-    memberCounts = await ClubMember.aggregate([
-      {
-        $match: {
-          club: {
-            $in: clubIds.map((id: any) => new mongoose.Types.ObjectId(id)),
-          },
-        },
-      },
-      {
-        $group: {
-          _id: '$club',
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+  const cache = await RedisHelper.redisGet('clubs',query)
+  if (cache) {
+    return cache;
   }
+  const qb = new QueryBuilder(Club.find({ active: true }), query)
+    .search(['name', 'location'])
+    .filter()
+    .sort()
+    .fields()
+    .paginate();
 
-  // Create a map of clubId -> memberCount
-  const memberCountMap = new Map(
-    memberCounts.map((item: any) => [item._id.toString(), item.count])
+  const { data: clubs, pagination } = await aggregatePage(
+    Club,
+    qb,
+    attachCount(ClubMember.collection.collectionName, 'club', 'numberOfMembers'),
+    ['numberOfMembers'],
   );
 
-  // Add member count to each club and select only required fields: image, name, numberOfMembers
   const data = clubs.map((club: any) => ({
     _id: club._id,
     image: club.image,
     name: club.name,
-    limitOfMember:club.limitOfMember,
-    numberOfMembers: memberCountMap.get(club._id.toString()) || 0,
+    limitOfMember: club.limitOfMember,
+    numberOfMembers: club.numberOfMembers || 0,
   }));
 
-  const pagination = await qb.getPaginationInfo();
+  await RedisHelper.redisSet('clubs',{data,pagination},query,60*60)
 
   return {
     pagination,
@@ -69,19 +53,23 @@ const getAllFromDB = async (query: Record<string, any>) => {
 };
 
 const getByIdFromDB = async (id: string) => {
-  const club = await Club.findById(id).lean();
+  const cache = await RedisHelper.redisGet(`club:${id}`)
+  if (cache) {
+    return cache;
+  }
+  const club = await aggregateById(
+    Club,
+    id,
+    attachCount(ClubMember.collection.collectionName, 'club', 'numberOfMembers'),
+  );
 
   if (!club) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Club not found');
   }
 
-  // Get member count
-  const memberCount = await ClubMember.countDocuments({ club: id });
+  await RedisHelper.redisSet(`club:${id}`,club,{},60*60)
 
-  return {
-    ...club,
-    numberOfMembers: memberCount,
-  };
+  return club;
 };
 
 const updateInDB = async (id: string, payload: Partial<IClub>) => {
@@ -93,6 +81,9 @@ const updateInDB = async (id: string, payload: Partial<IClub>) => {
     runValidators: true,
   }).lean();
 
+  await RedisHelper.keyDelete(`club:${id}:*`)
+  await RedisHelper.keyDelete(`clubs:*`)
+
   if (!updated) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Club not found');
   }
@@ -100,21 +91,24 @@ const updateInDB = async (id: string, payload: Partial<IClub>) => {
 };
 
 const deleteFromDB = async (id: string) => {
-  const club = await Club.findById(id).lean();
-  if (!club) {
+  const deleted = await Club.findByIdAndDelete(id).lean();
+  if (!deleted) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Club not found');
   }
 
-  // Delete all club members first
   await ClubMember.deleteMany({ club: id });
-
-  const deleted = await Club.findByIdAndDelete(id).lean();
+  await RedisHelper.keyDelete(`club:${id}:*`)
+  await RedisHelper.keyDelete(`clubs:*`)
+  await RedisHelper.bust('statistics:*');
   return deleted;
 };
 
 const joinClub = async (clubId: string, userId: string) => {
-  // Check if club exists and is active
-  const club = await Club.findById(clubId).lean();
+  const [club, existingMember] = await Promise.all([
+    Club.findById(clubId).lean(),
+    ClubMember.findOne({ user: userId, club: clubId }).lean(),
+  ]);
+
   if (!club) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Club not found');
   }
@@ -123,15 +117,11 @@ const joinClub = async (clubId: string, userId: string) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, 'Club is not active');
   }
 
-  // Check if user is already a member
-  const existingMember = await ClubMember.findOne({
-    user: userId,
-    club: clubId,
-  }).lean();
-
   if (existingMember) {
     // User is already a member, remove them (toggle off)
     await ClubMember.findByIdAndDelete(existingMember._id);
+    await RedisHelper.keyDelete(`club:${clubId}:*`)
+    await RedisHelper.keyDelete(`clubs:*`)
     return { joined: false, message: 'Left club successfully' };
   }
 
@@ -150,6 +140,8 @@ const joinClub = async (clubId: string, userId: string) => {
     user: userId,
     club: clubId,
   });
+  await RedisHelper.keyDelete(`club:${clubId}:*`)
+  await RedisHelper.keyDelete(`clubs:*`)
 
   return { joined: true, message: 'Joined club successfully' };
 };
@@ -171,6 +163,9 @@ const leaveClub = async (clubId: string, userId: string) => {
       'You are not a member of this club'
     );
   }
+
+  await RedisHelper.keyDelete(`club:${clubId}:*`)
+  await RedisHelper.keyDelete(`clubs:*`)
 
   return { message: 'Left club successfully' };
 };

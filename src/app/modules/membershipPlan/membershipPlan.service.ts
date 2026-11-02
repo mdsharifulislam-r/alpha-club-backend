@@ -6,6 +6,9 @@ import { MemberShipPlan } from './membershipPlan.model';
 import { MemberShipFeature } from './memberShipFeatures/memberShipFeatures.model';
 import mongoose from 'mongoose';
 import { USER_ROLES } from '../../../enums/user';
+import { RedisHelper } from '../../../tools/redis/redis.helper';
+
+const HOUR = 60 * 60;
 
 const createToDB = async (payload: IMemberShipPlan) => {
 
@@ -23,7 +26,9 @@ const createToDB = async (payload: IMemberShipPlan) => {
     throw new ApiError(StatusCodes.CONFLICT, 'Membership type already exists.');
   }
 
-  return await MemberShipPlan.create(payload);
+  const plan = await MemberShipPlan.create(payload);
+  await RedisHelper.bust('plans:*', 'plan-comparison:*');
+  return plan;
 };
 
 
@@ -32,6 +37,13 @@ const getAllFromDB = async (query: Record<string, any>, role: string) => {
   if (role === USER_ROLES.USER) {
     query.isActive = true;
   }
+
+  const cacheKey = `plans:${role || 'public'}`;
+  const cache = await RedisHelper.redisGet(cacheKey, query);
+  if (cache) {
+    return cache;
+  }
+
   const qb = new QueryBuilder(MemberShipPlan.find().populate({
     path: 'features',
     select: 'icon title description',
@@ -45,16 +57,18 @@ const getAllFromDB = async (query: Record<string, any>, role: string) => {
     .filter()
     .sort();
 
-  const data = await qb.modelQuery.lean();
-  const pagination = await qb.getPaginationInfo();
-
-  return {
-    pagination,
-    data,
-  };
+  const { data, pagination } = await qb.exec(q => q.lean());
+  const result = { pagination, data };
+  await RedisHelper.redisSet(cacheKey, result, query, HOUR);
+  return result;
 };
 
 const getByIdFromDB = async (type: string) => {
+  const cache = await RedisHelper.redisGet(`plan:${type}`);
+  if (cache) {
+    return cache;
+  }
+
   const plan = await MemberShipPlan.findOne({ membershipType: type })
     .populate({
       path: 'features',
@@ -66,6 +80,7 @@ const getByIdFromDB = async (type: string) => {
   if (!plan) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Membership plan not found');
   }
+  await RedisHelper.redisSet(`plan:${type}`, plan, {}, HOUR);
   return plan;
 };
 
@@ -123,6 +138,7 @@ const updateInDB = async (type: string, payload: Partial<IMemberShipPlan>) => {
   if (!updated) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Membership plan not found');
   }
+  await RedisHelper.bust('plans:*', `plan:${type}:*`, 'plan-comparison:*');
   return updated;
 };
 
@@ -132,11 +148,16 @@ const deleteFromDB = async (type: string) => {
     throw new ApiError(StatusCodes.NOT_FOUND, `No membership plan found with type: ${type}`);
   }
   const deleted = await MemberShipPlan.findOneAndDelete({ membershipType: type }).lean();
+  await RedisHelper.bust('plans:*', `plan:${type}:*`, 'plan-comparison:*');
   return deleted;
 };
 
 
 const featureComparison = async () => {
+  const cache = await RedisHelper.redisGet('plan-comparison');
+  if (cache) {
+    return cache;
+  }
 
   // Get all plans with their features and titles
   const plans = await MemberShipPlan.find({})
@@ -196,6 +217,7 @@ const featureComparison = async () => {
     ...comparison.filter(entry => entry._allTrue !== true),
   ].map(({ _allTrue, ...rest }) => rest); // Remove _allTrue from result
 
+  await RedisHelper.redisSet('plan-comparison', comparison, {}, HOUR);
   return comparison;
 };
 

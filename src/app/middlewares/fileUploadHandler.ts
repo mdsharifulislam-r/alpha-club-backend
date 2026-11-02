@@ -1,9 +1,10 @@
-import { Request } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import fs from 'fs';
 import { StatusCodes } from 'http-status-codes';
 import multer, { FileFilterCallback } from 'multer';
 import path from 'path';
 import ApiError from '../../errors/ApiError';
+import { compressUploadedImages } from './optimizedImage';
 
 const fileUploadHandler = (fields?: { name: string; maxCount: number }[]) => {
   //create upload folder
@@ -112,7 +113,18 @@ const fileUploadHandler = (fields?: { name: string; maxCount: number }[]) => {
     { name: 'media', maxCount: 5 },
     { name: 'doc', maxCount: 5 },
   ]);
-  return upload;
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    upload(req, res, (err: unknown) => {
+      if (err) {
+        next(err);
+        return;
+      }
+      compressUploadedImages(req.files)
+        .then(() => next())
+        .catch(() => next());
+    });
+  };
 };
 
 export default fileUploadHandler;

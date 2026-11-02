@@ -13,6 +13,9 @@ import { USER_ROLES } from '../../../enums/user';
 import { MemberShipPlan } from '../membershipPlan/membershipPlan.model';
 import { NotificationCount } from '../notification/notificationCountModel';
 import { Notification } from '../notification/notification.mode';
+import { RedisHelper } from '../../../tools/redis/redis.helper';
+
+const FIVE_MIN = 5 * 60;
 
 // const createToDB = async (payload: IMemberShipApplication) => {
 //   // Check membership plan
@@ -131,13 +134,26 @@ const createToDB = async (payload: IMemberShipApplication) => {
     payload.familyMembers = [];
   }
 
-  // Duplicate check by phone number
-  const phoneExists = await MemberShipApplication.findOne({
-    phone: payload.phone,
+  const activeStatuses = {
     membershipStatus: {
       $in: [MembershipStatus.PENDING, MembershipStatus.ACTIVE],
     },
-  });
+  };
+
+  const [phoneExists, emailExists] = await Promise.all([
+    MemberShipApplication.findOne({
+      phone: payload.phone,
+      ...activeStatuses,
+    })
+      .select('_id')
+      .lean(),
+    MemberShipApplication.findOne({
+      email: payload.email,
+      ...activeStatuses,
+    })
+      .select('_id')
+      .lean(),
+  ]);
 
   if (phoneExists) {
     throw new ApiError(
@@ -145,14 +161,6 @@ const createToDB = async (payload: IMemberShipApplication) => {
       `You already applied with this phone number`
     );
   }
-
-  // Duplicate check by email
-  const emailExists = await MemberShipApplication.findOne({
-    email: payload.email,
-    membershipStatus: {
-      $in: [MembershipStatus.PENDING, MembershipStatus.ACTIVE],
-    },
-  });
 
   if (emailExists) {
     throw new ApiError(
@@ -209,7 +217,9 @@ const createToDB = async (payload: IMemberShipApplication) => {
     ).catch(() => { });
   }
 
-  return await MemberShipApplication.create(payload);
+  const application = await MemberShipApplication.create(payload);
+  await RedisHelper.bust('applications:*', 'notifications:*', 'notification-count:*');
+  return application;
 };
 
 const createApplicationByAdmin = async (payload: IMemberShipApplication) => {
@@ -234,20 +244,29 @@ const createApplicationByAdmin = async (payload: IMemberShipApplication) => {
     );
   }
 
-  // Duplicate check by phone
-  const phoneExists = await MemberShipApplication.findOne({
-    phone: payload.phone,
+  const activeStatuses = {
     membershipStatus: { $in: [MembershipStatus.PENDING, MembershipStatus.ACTIVE] },
-  });
+  };
+
+  const [phoneExists, emailExists] = await Promise.all([
+    MemberShipApplication.findOne({
+      phone: payload.phone,
+      ...activeStatuses,
+    })
+      .select('_id')
+      .lean(),
+    MemberShipApplication.findOne({
+      email: payload.email,
+      ...activeStatuses,
+    })
+      .select('_id')
+      .lean(),
+  ]);
+
   if (phoneExists) {
     throw new ApiError(StatusCodes.BAD_REQUEST, `You already applied with this phone number`);
   }
 
-  // Duplicate check by email
-  const emailExists = await MemberShipApplication.findOne({
-    email: payload.email,
-    membershipStatus: { $in: [MembershipStatus.PENDING, MembershipStatus.ACTIVE] },
-  });
   if (emailExists) {
     throw new ApiError(StatusCodes.BAD_REQUEST, `You already applied with this email`);
   }
@@ -284,10 +303,15 @@ const createApplicationByAdmin = async (payload: IMemberShipApplication) => {
 
   emailHelper.sendEmail(emailData);
 
-
+  await RedisHelper.bust('applications:*', 'users:*', 'statistics:*');
   return application;
 };
 const getAllFromDB = async (query: Record<string, any>) => {
+  const cache = await RedisHelper.redisGet('applications', query);
+  if (cache) {
+    return cache;
+  }
+
   const qb = new QueryBuilder(MemberShipApplication.find(), query)
     .paginate()
     .search(['name', 'email', 'memberShipId', 'membershipType'])
@@ -295,16 +319,18 @@ const getAllFromDB = async (query: Record<string, any>) => {
     .filter()
     .sort();
 
-  const data = await qb.modelQuery.lean();
-  const pagination = await qb.getPaginationInfo();
-
-  return {
-    pagination,
-    data,
-  };
+  const { data, pagination } = await qb.exec(q => q.lean());
+  const result = { pagination, data };
+  await RedisHelper.redisSet('applications', result, query, FIVE_MIN);
+  return result;
 };
 
 const getByIdFromDB = async (id: mongoose.Types.ObjectId) => {
+  const cache = await RedisHelper.redisGet(`application:${id}`);
+  if (cache) {
+    return cache;
+  }
+
   const application = await MemberShipApplication.findById(id).lean();
   if (!application) {
     throw new ApiError(
@@ -312,6 +338,7 @@ const getByIdFromDB = async (id: mongoose.Types.ObjectId) => {
       'Membership application not found'
     );
   }
+  await RedisHelper.redisSet(`application:${id}`, application, {}, FIVE_MIN);
   return application;
 };
 
@@ -493,6 +520,7 @@ const updateInDB = async (
     );
   }
 
+  await RedisHelper.bust('applications:*', `application:${id}:*`, 'users:*', 'statistics:*');
   return updated;
 };
 
@@ -504,6 +532,7 @@ const deleteFromDB = async (id: mongoose.Types.ObjectId) => {
       'Membership application not found'
     );
   }
+  await RedisHelper.bust('applications:*', `application:${id}:*`, 'users:*', 'statistics:*');
   return deleted;
 };
 

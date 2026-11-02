@@ -24,6 +24,10 @@ const memberRedemptionSchema = new Schema<ImemberRedemption, MemberRedemptionMod
   }
 );
 
+memberRedemptionSchema.index({ creator: 1, date: 1 });
+memberRedemptionSchema.index({ user: 1, date: 1 });
+memberRedemptionSchema.index({ date: 1 });
+
 // Model export
 export const MemberRedemption = model<ImemberRedemption, MemberRedemptionModel>(
   "MemberRedemption",

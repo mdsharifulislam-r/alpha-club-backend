@@ -35,6 +35,8 @@ const clubSchema = new Schema<IClub, ClubModel>(
   { timestamps: true }
 );
 
+clubSchema.index({ active: 1, createdAt: -1 });
+
 export const Club = model<IClub, ClubModel>(
   'Club',
   clubSchema

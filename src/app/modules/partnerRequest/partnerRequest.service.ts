@@ -12,6 +12,9 @@ import generateRandomPassword from '../../../util/generateRandomPassword';
 import { USER_ROLES } from '../../../enums/user';
 import { Notification } from '../notification/notification.mode';
 import { NotificationCount } from '../notification/notificationCountModel';
+import { RedisHelper } from '../../../tools/redis/redis.helper';
+
+const FIVE_MIN = 5 * 60;
 
 const createToDB = async (payload: IPartnerRequest) => {
   // 🔎 Check existing email & phone
@@ -79,6 +82,7 @@ const createToDB = async (payload: IPartnerRequest) => {
     );
   }
 
+  await RedisHelper.bust('partner-requests:*', 'notifications:*', 'notification-count:*');
   return application;
 };
 
@@ -132,11 +136,16 @@ const createByAdminToDB = async (payload: IPartnerRequest) => {
 
   emailHelper.sendEmail(emailData);
 
-
+  await RedisHelper.bust('partner-requests:*', 'users:*', 'partner-users:*', 'statistics:*');
   return application;
 };
 
 const getAllFromDB = async (query: Record<string, any>) => {
+  const cache = await RedisHelper.redisGet('partner-requests', query);
+  if (cache) {
+    return cache;
+  }
+
   const qb = new QueryBuilder(PartnerRequest.find(), query)
     .paginate()
     .search(['companyName', 'contactName', 'contactEmail', 'partnerShipId'])
@@ -144,17 +153,23 @@ const getAllFromDB = async (query: Record<string, any>) => {
     .filter()
     .sort();
 
-  const data = await qb.modelQuery.lean();
-  const pagination = await qb.getPaginationInfo();
-
-  return { pagination, data };
+  const { data, pagination } = await qb.exec(q => q.lean());
+  const result = { pagination, data };
+  await RedisHelper.redisSet('partner-requests', result, query, FIVE_MIN);
+  return result;
 };
 
 const getByIdFromDB = async (id: mongoose.Types.ObjectId) => {
+  const cache = await RedisHelper.redisGet(`partner-request:${id}`);
+  if (cache) {
+    return cache;
+  }
+
   const application = await PartnerRequest.findById(id).lean();
   if (!application) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Partner request not found');
   }
+  await RedisHelper.redisSet(`partner-request:${id}`, application, {}, FIVE_MIN);
   return application;
 };
 
@@ -252,6 +267,13 @@ const updateInDB = async (
     );
   }
 
+  await RedisHelper.bust(
+    'partner-requests:*',
+    `partner-request:${id}:*`,
+    'users:*',
+    'partner-users:*',
+    'statistics:*',
+  );
   return updated;
 };
 
@@ -260,6 +282,7 @@ const deleteFromDB = async (id: mongoose.Types.ObjectId) => {
   if (!deleted) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Partner request not found');
   }
+  await RedisHelper.bust('partner-requests:*', `partner-request:${id}:*`);
   return deleted;
 };
 

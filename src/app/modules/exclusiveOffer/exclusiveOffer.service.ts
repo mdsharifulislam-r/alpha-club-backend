@@ -1,13 +1,41 @@
 import ApiError from '../../../errors/ApiError';
 import { StatusCodes } from 'http-status-codes';
+import { aggregatePage, attachRef } from '../../builder/aggregatePage';
 import QueryBuilder from '../../builder/QueryBuilder';
 import { IExclusiveOffer } from './exclusiveOffer.interface';
 import { ExclusiveOffer } from './exclusiveOffer.model';
 import { getLatLongWithLocalRequest } from './exclusiveOffer.util';
 import { FavouriteExclusiveOffer } from './favourite/favouriteExclusiveOffer.model';
-import mongoose from 'mongoose';
+import mongoose, { PipelineStage } from 'mongoose';
+import { Category } from './category/category.model';
+import { User } from '../user/user.model';
 import { USER_ROLES } from '../../../enums/user';
 import { OfferView } from '../offerView/offerView.model';
+import { RedisHelper } from '../../../tools/redis/redis.helper';
+
+const HOUR = 60 * 60;
+
+const clearOffers = async (userId?: string) => {
+  if (userId) {
+    await RedisHelper.bust(
+      `offers:${userId}:*`,
+      `my-offers:${userId}:*`,
+      `favourite-offers:${userId}:*`,
+      `partner-overview:${userId}:*`,
+      `redemption-overview:${userId}:*`,
+    );
+    return;
+  }
+
+  await RedisHelper.bust(
+    'offers:*',
+    'my-offers:*',
+    'favourite-offers:*',
+    'partner-overview:*',
+    'redemption-overview:*',
+    'statistics:*',
+  );
+};
 
 const DEFAULT_LOCATION = {
   type: 'Point' as const,
@@ -58,7 +86,9 @@ const createToDB = async (
 
   delete (payload as any).lat;
   delete (payload as any).lng;
-  return await ExclusiveOffer.create(payload);
+  const offer = await ExclusiveOffer.create(payload);
+  await clearOffers();
+  return offer;
 };
 
 // const getAllFromDB = async (query: Record<string, any>, userId: string) => {
@@ -313,6 +343,79 @@ const createToDB = async (
 //   return { pagination, data };
 // };
 
+const offerListStages = (
+  userId: string,
+  options: { withUser: boolean; withViews: boolean },
+): PipelineStage[] => {
+  const userObjectId = (
+    FavouriteExclusiveOffer.find({ user: userId }).cast(
+      FavouriteExclusiveOffer,
+    ) as { user: unknown }
+  ).user;
+
+  const stages: PipelineStage[] = [
+    ...attachRef(Category.collection.collectionName, 'category', 'name'),
+  ];
+
+  if (options.withUser) {
+    stages.push(...attachRef(User.collection.collectionName, 'user', 'name'));
+  }
+
+  stages.push(
+    {
+      $lookup: {
+        from: FavouriteExclusiveOffer.collection.collectionName,
+        let: { offerId: '$_id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$exclusiveOffer', '$$offerId'] },
+                  { $eq: ['$user', userObjectId] },
+                ],
+              },
+            },
+          },
+          { $limit: 1 },
+          { $project: { _id: 1 } },
+        ],
+        as: 'favouriteLookup',
+      },
+    },
+    {
+      $addFields: {
+        isFavourite: { $gt: [{ $size: '$favouriteLookup' }, 0] },
+      },
+    },
+    { $unset: 'favouriteLookup' },
+  );
+
+  if (options.withViews) {
+    stages.push(
+      {
+        $lookup: {
+          from: OfferView.collection.collectionName,
+          let: { offerId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$offer', '$$offerId'] } } },
+            { $count: 'count' },
+          ],
+          as: 'viewLookup',
+        },
+      },
+      {
+        $addFields: {
+          views: { $ifNull: [{ $arrayElemAt: ['$viewLookup.count', 0] }, 0] },
+        },
+      },
+      { $unset: 'viewLookup' },
+    );
+  }
+
+  return stages;
+};
+
 const getAllFromDB = async (
   query: Record<string, any>,
   userId: string,
@@ -327,6 +430,12 @@ const getAllFromDB = async (
   if (role && role === USER_ROLES.USER) {
     query.published = true;
     query.status = 'approved';
+  }
+
+  const cacheKey = `offers:${userId}:${role || 'public'}`;
+  const cache = await RedisHelper.redisGet(cacheKey, query);
+  if (cache) {
+    return cache;
   }
 
   if (lat && lng) {
@@ -384,67 +493,69 @@ const getAllFromDB = async (
       });
     }
 
-    // Favourite lookup (FIXED ObjectId comparison)
-    aggregationStages.push({
-      $lookup: {
-        from: 'favouriteexclusiveoffers',
-        let: { offerId: '$_id' },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $eq: ['$exclusiveOffer', '$$offerId'] },
-                  { $eq: ['$user', userObjectId] },
-                ],
-              },
-            },
-          },
-        ],
-        as: 'favourite',
-      },
-    });
-
-    aggregationStages.push({
-      $addFields: {
-        isFavourite: { $gt: [{ $size: '$favourite' }, 0] },
-      },
-    });
-
-    aggregationStages.push({
-      $project: {
-        distance: 1,
-        image: 1,
-        name: 1,
-        discount: 1,
-        title: 1,
-        location: 1,
-        isFavourite: 1,
-        description: 1,
-        businessDescription: 1,
-        published: 1,
-        status: 1,
-        category: {
-          _id: 1,
-          name: 1,
-        },
-      },
-    });
-
-    // Pagination
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const countAggregation = [...aggregationStages, { $count: 'total' }];
-    const totalResult = await ExclusiveOffer.aggregate(countAggregation);
-    const total = totalResult[0]?.total || 0;
-
-    data = await ExclusiveOffer.aggregate([
+    const [facetResult] = await ExclusiveOffer.aggregate([
       ...aggregationStages,
-      { $skip: skip },
-      { $limit: limit },
+      {
+        $facet: {
+          meta: [{ $count: 'total' }],
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $lookup: {
+                from: 'favouriteexclusiveoffers',
+                let: { offerId: '$_id' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [
+                          { $eq: ['$exclusiveOffer', '$$offerId'] },
+                          { $eq: ['$user', userObjectId] },
+                        ],
+                      },
+                    },
+                  },
+                  { $limit: 1 },
+                ],
+                as: 'favourite',
+              },
+            },
+            {
+              $addFields: {
+                isFavourite: { $gt: [{ $size: '$favourite' }, 0] },
+              },
+            },
+            {
+              $project: {
+                distance: 1,
+                image: 1,
+                name: 1,
+                discount: 1,
+                title: 1,
+                location: 1,
+                isFavourite: 1,
+                description: 1,
+                businessDescription: 1,
+                published: 1,
+                status: 1,
+                category: {
+                  _id: 1,
+                  name: 1,
+                },
+              },
+            },
+          ],
+        },
+      },
     ]);
+
+    const total = facetResult?.meta?.[0]?.total || 0;
+    data = facetResult?.data || [];
 
     pagination = {
       total,
@@ -458,36 +569,26 @@ const getAllFromDB = async (
     ) as any;
 
     const qb = new QueryBuilder(modelQuery, { ...query })
-      .paginate()
       .search(['name', 'title'])
       .filter(['lat', 'lng', 'km', 'minKm'])
-      .sort();
+      .sort()
+      .paginate();
 
-    data = await qb.modelQuery
-      .populate('category', 'name') // only get name field
-      .populate('user', 'name') // optional fields
-      .lean();
-    pagination = await qb.getPaginationInfo();
+    qb.modelQuery.populate('category', 'name').populate('user', 'name');
 
-    const offerIds = data.map((offer: any) => offer._id);
-
-    const favs = await FavouriteExclusiveOffer.find(
-      {
-        user: userId,
-        exclusiveOffer: { $in: offerIds },
-      },
-      'exclusiveOffer',
-    ).lean();
-
-    const favSet = new Set(favs.map((f: any) => String(f.exclusiveOffer)));
-
-    data = data.map((offer: any) => ({
-      ...offer,
-      isFavourite: favSet.has(String(offer._id)),
-    }));
+    const listed = await aggregatePage(
+      ExclusiveOffer,
+      qb,
+      offerListStages(userId, { withUser: true, withViews: false }),
+      ['isFavourite'],
+    );
+    data = listed.data;
+    pagination = listed.pagination;
   }
 
-  return { pagination, data };
+  const result = { pagination, data };
+  await RedisHelper.redisSet(cacheKey, result, query, HOUR);
+  return result;
 };
 const getMyOffersFromDB = async (
   query: Record<string, any>,
@@ -505,6 +606,12 @@ const getMyOffersFromDB = async (
     query.published = true;
   }
   query.user = userId;
+
+  const cacheKey = `my-offers:${userId}:${role || 'public'}`;
+  const cache = await RedisHelper.redisGet(cacheKey, query);
+  if (cache) {
+    return cache;
+  }
 
   if (lat && lng) {
     const userObjectId = new mongoose.Types.ObjectId(userId);
@@ -558,89 +665,86 @@ const getMyOffersFromDB = async (
       });
     }
 
-    // Views lookup
-    aggregationStages.push({
-      $lookup: {
-        from: 'offerviews', // collection name for views
-        let: { offerId: '$_id' },
-        pipeline: [
-          {
-            $match: {
-              $expr: { $eq: ['$offer', '$$offerId'] }, // match by offer ID
-            },
-          },
-          {
-            $count: 'views', // directly name it views
-          },
-        ],
-        as: 'views', // temporary array
-      },
-    });
-
-    // Favourite lookup (FIXED ObjectId comparison)
-    aggregationStages.push({
-      $lookup: {
-        from: 'favouriteexclusiveoffers',
-        let: { offerId: '$_id' },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $eq: ['$exclusiveOffer', '$$offerId'] },
-                  { $eq: ['$user', userObjectId] },
-                ],
-              },
-            },
-          },
-        ],
-        as: 'favourite',
-      },
-    });
-
-    // Add isFavourite field
-    aggregationStages.push({
-      $addFields: {
-        isFavourite: { $gt: [{ $size: '$favourite' }, 0] },
-        views: { $ifNull: [{ $arrayElemAt: ['$views.views', 0] }, 0] }, // now views is a number
-      },
-    });
-
-    aggregationStages.push({
-      $project: {
-        distance: 1,
-        image: 1,
-        name: 1,
-        discount: 1,
-        title: 1,
-        location: 1,
-        isFavourite: 1,
-        businessDescription: 1,
-        description: 1,
-        published: 1,
-        status: 1,
-        views: 1,
-        category: {
-          _id: 1,
-          name: 1,
-        },
-      },
-    });
-
-    // Pagination
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const countAggregation = [...aggregationStages, { $count: 'total' }];
-    const totalResult = await ExclusiveOffer.aggregate(countAggregation);
-    const total = totalResult[0]?.total || 0;
-
-    data = await ExclusiveOffer.aggregate([
+    const [facetResult] = await ExclusiveOffer.aggregate([
       ...aggregationStages,
-      { $skip: skip },
-      { $limit: limit },
+      {
+        $facet: {
+          meta: [{ $count: 'total' }],
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $lookup: {
+                from: 'offerviews',
+                let: { offerId: '$_id' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: { $eq: ['$offer', '$$offerId'] },
+                    },
+                  },
+                  { $count: 'views' },
+                ],
+                as: 'views',
+              },
+            },
+            {
+              $lookup: {
+                from: 'favouriteexclusiveoffers',
+                let: { offerId: '$_id' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [
+                          { $eq: ['$exclusiveOffer', '$$offerId'] },
+                          { $eq: ['$user', userObjectId] },
+                        ],
+                      },
+                    },
+                  },
+                  { $limit: 1 },
+                ],
+                as: 'favourite',
+              },
+            },
+            {
+              $addFields: {
+                isFavourite: { $gt: [{ $size: '$favourite' }, 0] },
+                views: { $ifNull: [{ $arrayElemAt: ['$views.views', 0] }, 0] },
+              },
+            },
+            {
+              $project: {
+                distance: 1,
+                image: 1,
+                name: 1,
+                discount: 1,
+                title: 1,
+                location: 1,
+                isFavourite: 1,
+                businessDescription: 1,
+                description: 1,
+                published: 1,
+                status: 1,
+                views: 1,
+                category: {
+                  _id: 1,
+                  name: 1,
+                },
+              },
+            },
+          ],
+        },
+      },
     ]);
+
+    const total = facetResult?.meta?.[0]?.total || 0;
+    data = facetResult?.data || [];
 
     pagination = {
       total,
@@ -654,45 +758,26 @@ const getMyOffersFromDB = async (
     ) as any;
 
     const qb = new QueryBuilder(modelQuery, { ...query })
-      .paginate()
       .search(['name', 'title'])
       .filter(['lat', 'lng', 'km', 'minKm'])
-      .sort();
+      .sort()
+      .paginate();
 
-    data = await qb.modelQuery.populate('category', 'name').lean();
+    qb.modelQuery.populate('category', 'name');
 
-    pagination = await qb.getPaginationInfo();
-
-    const offerIds = data.map((offer: any) => offer._id);
-
-    const favs = await FavouriteExclusiveOffer.find(
-      {
-        user: userId,
-        exclusiveOffer: { $in: offerIds },
-      },
-      'exclusiveOffer',
-    ).lean();
-
-    const favSet = new Set(favs.map((f: any) => String(f.exclusiveOffer)));
-    // 1️⃣ Get all view counts grouped by offer
-    const offerViews = await OfferView.aggregate([
-      { $match: { offer: { $in: offerIds } } },
-      { $group: { _id: '$offer', count: { $sum: 1 } } },
-    ]);
-
-    // 2️⃣ Make a map for easy lookup
-    const viewsMap = new Map<string, number>();
-    offerViews.forEach((v: any) => {
-      viewsMap.set(String(v._id), v.count);
-    });
-    data = data.map((offer: any) => ({
-      ...offer,
-      isFavourite: favSet.has(String(offer._id)),
-      views: viewsMap.get(String(offer._id)) || 0,
-    }));
+    const listed = await aggregatePage(
+      ExclusiveOffer,
+      qb,
+      offerListStages(userId, { withUser: false, withViews: true }),
+      ['isFavourite', 'views'],
+    );
+    data = listed.data;
+    pagination = listed.pagination;
   }
 
-  return { pagination, data };
+  const result = { pagination, data };
+  await RedisHelper.redisSet(cacheKey, result, query, HOUR);
+  return result;
 };
 
 const getByIdFromDB = async (id: string, userId: string) => {
@@ -712,6 +797,7 @@ const getByIdFromDB = async (id: string, userId: string) => {
       { $set: { updatedAt: new Date() } },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
+    await RedisHelper.bust(`my-offers:${userId}:*`);
   }
 
   return exclusiveOffer;
@@ -828,6 +914,7 @@ const updateInDB = async (
   if (!updated) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Exclusive offer not found');
   }
+  await clearOffers();
   return updated;
 };
 
@@ -837,6 +924,7 @@ const deleteFromDB = async (id: string) => {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Exclusive offer not found');
   }
   const deleted = await ExclusiveOffer.findByIdAndDelete(id).lean();
+  await clearOffers();
   return deleted;
 };
 
@@ -848,26 +936,25 @@ const createFavourite = async ({
   exclusiveOffer: string;
 }) => {
   // Check if Exclusive Offer exists
-  const exclusiveOfferExists =
-    await ExclusiveOffer.findById(exclusiveOffer).lean();
+  const [exclusiveOfferExists, existingFavourite] = await Promise.all([
+    ExclusiveOffer.findById(exclusiveOffer).select('_id').lean(),
+    FavouriteExclusiveOffer.findOne({ user, exclusiveOffer }).select('_id'),
+  ]);
+
   if (!exclusiveOfferExists) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Exclusive offer not found');
   }
 
-  // Check if it's already a favourite for the user (toggle: if so, remove. if not, add)
-  const existingFavourite = await FavouriteExclusiveOffer.findOne({
-    user,
-    exclusiveOffer,
-  });
-
   if (existingFavourite) {
     await FavouriteExclusiveOffer.findByIdAndDelete(existingFavourite._id);
+    await clearOffers(user);
     return { removed: true };
   } else {
     const newFavourite = await FavouriteExclusiveOffer.create({
       user,
       exclusiveOffer,
     });
+    await clearOffers(user);
     return { added: true, favourite: newFavourite };
   }
 };
@@ -876,6 +963,12 @@ const getFavouritesFromDB = async (
   userId: string,
   query: Record<string, any>,
 ) => {
+  const cacheKey = `favourite-offers:${userId}`;
+  const cache = await RedisHelper.redisGet(cacheKey, query);
+  if (cache) {
+    return cache;
+  }
+
   const qb = new QueryBuilder(
     FavouriteExclusiveOffer.find({ user: userId }).populate({
       path: 'exclusiveOffer',
@@ -892,13 +985,10 @@ const getFavouritesFromDB = async (
     .filter()
     .sort();
 
-  const data = await qb.modelQuery.lean();
-  const pagination = await qb.getPaginationInfo();
-
-  return {
-    pagination,
-    data,
-  };
+  const { data, pagination } = await qb.exec(q => q.lean());
+  const result = { pagination, data };
+  await RedisHelper.redisSet(cacheKey, result, query, HOUR);
+  return result;
 };
 
 export const ExclusiveOfferService = {

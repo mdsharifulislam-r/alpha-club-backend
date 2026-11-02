@@ -19,6 +19,7 @@ const storyLikeSchema = new Schema<IStoryLike, StoryLikeModel>(
 
 // Ensure unique combination of user and story
 storyLikeSchema.index({ user: 1, story: 1 }, { unique: true });
+storyLikeSchema.index({ story: 1 });
 
 export const StoryLike = model<IStoryLike, StoryLikeModel>(
   'StoryLike',

@@ -1,14 +1,19 @@
 import ApiError from '../../../errors/ApiError';
 import { StatusCodes } from 'http-status-codes';
+import { aggregateById, aggregatePage, attachCount } from '../../builder/aggregatePage';
 import QueryBuilder from '../../builder/QueryBuilder';
 import { IStory } from './stories.interface';
 import { Story } from './stories.model';
 import { StoryLike } from './storiesLike/storiesLike.model';
-import mongoose from 'mongoose';
 import { USER_ROLES } from '../../../enums/user';
+import { RedisHelper } from '../../../tools/redis/redis.helper';
+
+const HOUR = 60 * 60;
 
 const createToDB = async (payload: IStory) => {
-  return await Story.create(payload);
+  const story = await Story.create(payload);
+  await RedisHelper.bust('stories:*');
+  return story;
 };
 
 const getAllFromDB = async (query: Record<string, any>, role: string) => {
@@ -20,68 +25,54 @@ const getAllFromDB = async (query: Record<string, any>, role: string) => {
     query.published = true
   }
 
-  const qb = new QueryBuilder(Story.find(), appQuery)
-    .paginate()
-    .search(['title', 'description'])
-    .fields()
-    .filter()
-    .sort();
-
-  const stories = await qb.modelQuery.lean();
-
-  const storyIds = stories.map((story: any) => story._id);
-  let likeCounts: any[] = [];
-
-  if (storyIds.length > 0) {
-    likeCounts = await StoryLike.aggregate([
-      {
-        $match: {
-          story: {
-            $in: storyIds.map(
-              (id: any) => new mongoose.Types.ObjectId(id)
-            ),
-          },
-        },
-      },
-      {
-        $group: {
-          _id: '$story',
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+  const cacheKey = `stories:${role || 'public'}`;
+  const cache = await RedisHelper.redisGet(cacheKey, query);
+  if (cache) {
+    return cache;
   }
 
-  const likeCountMap = new Map(
-    likeCounts.map((item: any) => [item._id.toString(), item.count])
+  const qb = new QueryBuilder(Story.find(), appQuery)
+    .search(['title', 'description'])
+    .filter()
+    .sort()
+    .fields()
+    .paginate();
+
+  const { data: stories, pagination } = await aggregatePage(
+    Story,
+    qb,
+    attachCount(StoryLike.collection.collectionName, 'story', 'likeCount'),
+    ['likeCount'],
   );
 
   const data = stories.map((story: any) => ({
     ...story,
-    likeCount: likeCountMap.get(story._id.toString()) || 0,
+    likeCount: story.likeCount || 0,
   }));
 
-  const pagination = await qb.getPaginationInfo();
-
-  return {
-    pagination,
-    data,
-  };
+  const result = { pagination, data };
+  await RedisHelper.redisSet(cacheKey, result, query, HOUR);
+  return result;
 };
 
 const getByIdFromDB = async (id: string) => {
-  const story = await Story.findById(id).lean();
+  const cache = await RedisHelper.redisGet(`story:${id}`);
+  if (cache) {
+    return cache;
+  }
+
+  const story = await aggregateById(
+    Story,
+    id,
+    attachCount(StoryLike.collection.collectionName, 'story', 'likeCount'),
+  );
 
   if (!story) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Story not found');
   }
 
-  const likeCount = await StoryLike.countDocuments({ story: id });
-
-  return {
-    ...story,
-    likeCount,
-  };
+  await RedisHelper.redisSet(`story:${id}`, story, {}, HOUR);
+  return story;
 };
 
 const updateInDB = async (
@@ -138,32 +129,31 @@ const updateInDB = async (
     throw new ApiError(StatusCodes.NOT_FOUND, 'Story not found');
   }
 
+  await RedisHelper.bust('stories:*', `story:${id}:*`);
   return updated;
 };
 
 
 const deleteFromDB = async (id: string) => {
-  const story = await Story.findById(id).lean();
-  if (!story) {
+  const deleted = await Story.findByIdAndDelete(id).lean();
+  if (!deleted) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Story not found');
   }
 
   await StoryLike.deleteMany({ story: id });
-
-  const deleted = await Story.findByIdAndDelete(id).lean();
+  await RedisHelper.bust('stories:*', `story:${id}:*`);
   return deleted;
 };
 
 const toggleLike = async (storyId: string, userId: string) => {
-  const story = await Story.findById(storyId).lean();
+  const [story, existingLike] = await Promise.all([
+    Story.findById(storyId).select('_id').lean(),
+    StoryLike.findOne({ user: userId, story: storyId }).lean(),
+  ]);
+
   if (!story) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Story not found');
   }
-
-  const existingLike = await StoryLike.findOne({
-    user: userId,
-    story: storyId,
-  }).lean();
 
   if (existingLike) {
     await StoryLike.findByIdAndDelete(existingLike._id);
@@ -175,6 +165,7 @@ const toggleLike = async (storyId: string, userId: string) => {
   }
 
   const likeCount = await StoryLike.countDocuments({ story: storyId });
+  await RedisHelper.bust('stories:*', `story:${storyId}:*`);
 
   return {
     liked: !existingLike,

@@ -9,4 +9,7 @@ const OfferViewSchema = new Schema<IOfferView>(
   { timestamps: true }
 );
 
+OfferViewSchema.index({ offer: 1 });
+OfferViewSchema.index({ user: 1, offer: 1 });
+
 export const OfferView: Model<IOfferView> = mongoose.model<IOfferView>("OfferView",OfferViewSchema);

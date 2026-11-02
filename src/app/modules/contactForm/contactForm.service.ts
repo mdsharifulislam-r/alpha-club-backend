@@ -10,6 +10,9 @@ import { User } from '../user/user.model';
 import { USER_ROLES } from '../../../enums/user';
 import { Notification } from '../notification/notification.mode';
 import { NotificationCount } from '../notification/notificationCountModel';
+import { RedisHelper } from '../../../tools/redis/redis.helper';
+
+const FIVE_MIN = 5 * 60;
 
 // const createToDB = async (payload: IContactForm) => {
 //   // Save Contact Form as usual
@@ -66,10 +69,19 @@ import { NotificationCount } from '../notification/notificationCountModel';
 // };
 
 const createToDB = async (payload: IContactForm) => {
-  // 🔴 Check email duplicate in ContactForm
-  const emailExists = await ContactForm.findOne({
-    email: payload.email,
-  });
+  const membershipChecks = payload.membershipType
+    ? [
+        MemberShipApplication.findOne({ email: payload.email }).select('_id').lean(),
+        MemberShipApplication.findOne({ phone: payload.contact }).select('_id').lean(),
+      ]
+    : [Promise.resolve(null), Promise.resolve(null)];
+
+  const [emailExists, phoneExists, emailExistsInApplication, phoneExistsInApplication] =
+    await Promise.all([
+      ContactForm.findOne({ email: payload.email }).select('_id').lean(),
+      ContactForm.findOne({ contact: payload.contact }).select('_id').lean(),
+      ...membershipChecks,
+    ]);
 
   if (emailExists) {
     throw new ApiError(
@@ -78,11 +90,6 @@ const createToDB = async (payload: IContactForm) => {
     );
   }
 
-  // 🔴 Check phone duplicate in ContactForm
-  const phoneExists = await ContactForm.findOne({
-    contact: payload.contact,
-  });
-
   if (phoneExists) {
     throw new ApiError(
       StatusCodes.CONFLICT,
@@ -90,24 +97,13 @@ const createToDB = async (payload: IContactForm) => {
     );
   }
 
-  // 🔴 Check email duplicate in Membership Application
   if (payload.membershipType) {
-    const emailExistsInApplication =
-      await MemberShipApplication.findOne({
-        email: payload.email,
-      });
-
     if (emailExistsInApplication) {
       throw new ApiError(
         StatusCodes.CONFLICT,
         "Membership application already exists with this email"
       );
     }
-
-    const phoneExistsInApplication =
-      await MemberShipApplication.findOne({
-        phone: payload.contact,
-      });
 
     if (phoneExistsInApplication) {
       throw new ApiError(
@@ -119,6 +115,12 @@ const createToDB = async (payload: IContactForm) => {
 
   // ✅ Save Contact Form
   await ContactForm.create(payload);
+  await RedisHelper.bust(
+    'contact-forms:*',
+    'applications:*',
+    'notifications:*',
+    'notification-count:*',
+  );
 
   // ✅ Save Membership Application
   if (payload.membershipType) {
@@ -177,10 +179,19 @@ const createToDB = async (payload: IContactForm) => {
 
 
 const createFormToDB = async (payload: IContactForm) => {
-  // 🔴 Check email duplicate in ContactForm
-  const emailExists = await ContactForm.findOne({
-    email: payload.email,
-  });
+  const membershipChecks = payload.membershipType
+    ? [
+        MemberShipApplication.findOne({ email: payload.email }).select('_id').lean(),
+        MemberShipApplication.findOne({ phone: payload.contact }).select('_id').lean(),
+      ]
+    : [Promise.resolve(null), Promise.resolve(null)];
+
+  const [emailExists, phoneExists, emailExistsInApplication, phoneExistsInApplication] =
+    await Promise.all([
+      ContactForm.findOne({ email: payload.email }).select('_id').lean(),
+      ContactForm.findOne({ contact: payload.contact }).select('_id').lean(),
+      ...membershipChecks,
+    ]);
 
   if (emailExists && payload.membershipType) {
     throw new ApiError(
@@ -189,11 +200,6 @@ const createFormToDB = async (payload: IContactForm) => {
     );
   }
 
-  // 🔴 Check phone duplicate in ContactForm
-  const phoneExists = await ContactForm.findOne({
-    contact: payload.contact,
-  });
-
   if (phoneExists && payload.membershipType) {
     throw new ApiError(
       StatusCodes.CONFLICT,
@@ -201,24 +207,13 @@ const createFormToDB = async (payload: IContactForm) => {
     );
   }
 
-  // 🔴 Check email duplicate in Membership Application
   if (payload.membershipType) {
-    const emailExistsInApplication =
-      await MemberShipApplication.findOne({
-        email: payload.email,
-      });
-
     if (emailExistsInApplication && payload.membershipType) {
       throw new ApiError(
         StatusCodes.CONFLICT,
         "Membership application already exists with this email"
       );
     }
-
-    const phoneExistsInApplication =
-      await MemberShipApplication.findOne({
-        phone: payload.contact,
-      });
 
     if (phoneExistsInApplication && payload.membershipType) {
       throw new ApiError(
@@ -230,6 +225,12 @@ const createFormToDB = async (payload: IContactForm) => {
 
   // ✅ Save Contact Form
   await ContactForm.create(payload);
+  await RedisHelper.bust(
+    'contact-forms:*',
+    'applications:*',
+    'notifications:*',
+    'notification-count:*',
+  );
 
   // ✅ Save Membership Application
   if (payload.membershipType) {
@@ -288,6 +289,11 @@ const createFormToDB = async (payload: IContactForm) => {
 };
 
 const getAllFromDB = async (query: Record<string, any>) => {
+  const cache = await RedisHelper.redisGet('contact-forms', query);
+  if (cache) {
+    return cache;
+  }
+
   const qb = new QueryBuilder(
     ContactForm.find().select('name contact email message createdAt'),
     query
@@ -298,21 +304,24 @@ const getAllFromDB = async (query: Record<string, any>) => {
     .filter()
     .sort();
   
-  const data = await qb.modelQuery.lean();
-  const pagination = await qb.getPaginationInfo();
-  
-  return {
-    pagination,
-    data,
-  };
+  const { data, pagination } = await qb.exec(q => q.lean());
+  const result = { pagination, data };
+  await RedisHelper.redisSet('contact-forms', result, query, FIVE_MIN);
+  return result;
 };
 
 const getByIdFromDB = async (id: string) => {
+  const cache = await RedisHelper.redisGet(`contact-form:${id}`);
+  if (cache) {
+    return cache;
+  }
+
   const contactForm = await ContactForm.findById(id).lean();
   
   if (!contactForm) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Contact form not found');
   }
+  await RedisHelper.redisSet(`contact-form:${id}`, contactForm, {}, FIVE_MIN);
   return contactForm;
 };
 
@@ -329,6 +338,7 @@ const updateInDB = async (id: string, payload: Partial<IContactForm>) => {
   if (!updated) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Contact form not found');
   }
+  await RedisHelper.bust('contact-forms:*', `contact-form:${id}:*`);
   return updated;
 };
 
@@ -338,6 +348,7 @@ const deleteFromDB = async (id: string) => {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Contact form not found');
   }
   const deleted = await ContactForm.findByIdAndDelete(id).lean();
+  await RedisHelper.bust('contact-forms:*', `contact-form:${id}:*`);
   return deleted;
 };
 

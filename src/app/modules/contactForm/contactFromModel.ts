@@ -31,5 +31,8 @@ const faqContactSchema = new Schema<IContactForm, ContactFormModel>(
     { timestamps: true }
 );
 
+faqContactSchema.index({ email: 1 });
+faqContactSchema.index({ contact: 1 });
+
 export const ContactForm = model<IContactForm, ContactFormModel>('ContactForm',faqContactSchema);
 

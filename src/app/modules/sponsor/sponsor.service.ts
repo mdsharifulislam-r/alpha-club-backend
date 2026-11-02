@@ -4,12 +4,23 @@ import QueryBuilder from '../../builder/QueryBuilder';
 import { ISponsor } from './sponsor.interface';
 import { Sponsor } from './sponsor.model';
 import { USER_ROLES } from '../../../enums/user';
+import { RedisHelper } from '../../../tools/redis/redis.helper';
+
+const HOUR = 60 * 60;
 
 const createToDB = async (payload: ISponsor) => {
-  return await Sponsor.create(payload);
+  const sponsor = await Sponsor.create(payload);
+  await RedisHelper.bust('sponsors:*');
+  return sponsor;
 };
 
 const getAllFromDB = async (query: Record<string, any>, role: string) => {
+  const cacheKey = `sponsors:${role || 'public'}`;
+  const cache = await RedisHelper.redisGet(cacheKey, query);
+  if (cache) {
+    return cache;
+  }
+
   // If the role is 'user', only show sponsors where publishing is true
   const filter: Record<string, any> = {};
 
@@ -27,21 +38,24 @@ const getAllFromDB = async (query: Record<string, any>, role: string) => {
     .filter()
     .sort();
 
-  const data = await qb.modelQuery.lean();
-  const pagination = await qb.getPaginationInfo();
-
-  return {
-    pagination,
-    data,
-  };
+  const { data, pagination } = await qb.exec(q => q.lean());
+  const result = { pagination, data };
+  await RedisHelper.redisSet(cacheKey, result, query, HOUR);
+  return result;
 };
 
 const getByIdFromDB = async (id: string) => {
+  const cache = await RedisHelper.redisGet(`sponsor:${id}`);
+  if (cache) {
+    return cache;
+  }
+
   const sponsor = await Sponsor.findById(id).lean();
 
   if (!sponsor) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Sponsor not found');
   }
+  await RedisHelper.redisSet(`sponsor:${id}`, sponsor, {}, HOUR);
   return sponsor;
 };
 
@@ -66,6 +80,7 @@ const updateInDB = async (id: string, payload: Partial<ISponsor>) => {
   if (!updated) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Sponsor not found');
   }
+  await RedisHelper.bust('sponsors:*', `sponsor:${id}:*`);
   return updated;
 };
 
@@ -75,6 +90,7 @@ const deleteFromDB = async (id: string) => {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Sponsor not found');
   }
   const deleted = await Sponsor.findByIdAndDelete(id).lean();
+  await RedisHelper.bust('sponsors:*', `sponsor:${id}:*`);
   return deleted;
 };
 

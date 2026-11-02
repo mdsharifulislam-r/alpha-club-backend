@@ -1,12 +1,19 @@
 import ApiError from '../../../errors/ApiError';
 import { StatusCodes } from 'http-status-codes';
+import { aggregateById, aggregatePage } from '../../builder/aggregatePage';
 import QueryBuilder from '../../builder/QueryBuilder';
+import { PipelineStage } from 'mongoose';
 import { IEvent } from './event.interface';
 import { Event } from './event.model';
 import { EventRegistration } from './eventRegistration/eventRegistration.model';
+import { RedisHelper } from '../../../tools/redis/redis.helper';
+
+const EVENT_TTL = 10 * 60;
 
 const createToDB = async (payload: IEvent) => {
-  return await Event.create(payload);
+  const event = await Event.create(payload);
+  await RedisHelper.bust('events:*', 'partner-overview:*', 'statistics:*');
+  return event;
 };
 
 // const getAllFromDB = async (query: Record<string, any>) => {
@@ -44,103 +51,159 @@ const createToDB = async (payload: IEvent) => {
 //     data: dataWithCount,
 //   };
 // };
+const registrationCollection = () => EventRegistration.collection.collectionName;
+
+const castUserId = (userId: string) =>
+  (EventRegistration.find({ user: userId }).cast(EventRegistration) as { user: unknown }).user;
+
+const withTimeExceeded = (
+  eventDate: Date | string | undefined,
+  joinStatus: string | undefined,
+  hasRegistration: boolean,
+) => {
+  if (!eventDate) return joinStatus;
+
+  const parsed = new Date(eventDate);
+  const now = new Date();
+  const eventYMD = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  const nowYMD = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (eventYMD < nowYMD && (!hasRegistration || joinStatus === 'ongoing')) {
+    return 'time_exceeded';
+  }
+
+  return joinStatus;
+};
+
+const registrationLookup = (matchUser?: unknown): PipelineStage => ({
+  $lookup: {
+    from: registrationCollection(),
+    let: { eventId: '$_id' },
+    pipeline: [
+      {
+        $match: {
+          $expr: matchUser === undefined
+            ? { $eq: ['$event', '$$eventId'] }
+            : {
+                $and: [
+                  { $eq: ['$event', '$$eventId'] },
+                  { $eq: ['$user', matchUser] },
+                ],
+              },
+        },
+      },
+      { $limit: 1 },
+      { $project: { status: 1 } },
+    ],
+    as: 'myRegistration',
+  },
+});
+
 const getAllFromDB = async (query: Record<string, any>, userId: string) => {
-  const updatedQuery = {
-    ...query,
-  };
+  const cacheKey = `events:${userId}`;
+  const cache = await RedisHelper.redisGet(cacheKey, query);
+  if (cache) {
+    return cache;
+  }
 
-  const qb = new QueryBuilder(Event.find(), updatedQuery)
-    .paginate()
-    .search(['name', 'title', 'location' ])
-    .fields()
+  const qb = new QueryBuilder(Event.find(), query)
+    .search(['name', 'title', 'location'])
     .filter(['status'])
-    .sort();
+    .sort()
+    .fields()
+    .paginate();
 
-  const data = await qb.modelQuery.lean();
-  const pagination = await qb.getPaginationInfo();
+  const stages: PipelineStage[] = [
+    {
+      $lookup: {
+        from: registrationCollection(),
+        let: { eventId: '$_id' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$event', '$$eventId'] } } },
+          { $count: 'count' },
+        ],
+        as: 'eventCountBucket',
+      },
+    },
+    registrationLookup(castUserId(userId)),
+    {
+      $addFields: {
+        eventCount: {
+          $ifNull: [{ $arrayElemAt: ['$eventCountBucket.count', 0] }, 0],
+        },
+        registered: { $gt: [{ $size: '$myRegistration' }, 0] },
+        registrationStatus: { $arrayElemAt: ['$myRegistration.status', 0] },
+      },
+    },
+    { $unset: ['eventCountBucket', 'myRegistration'] },
+  ];
 
-  const dataWithExtra = await Promise.all(
-    data.map(async (event: any) => {
+  const { data, pagination } = await aggregatePage(Event, qb, stages, [
+    'eventCount',
+    'registered',
+    'registrationStatus',
+  ]);
 
-      const eventCount = await EventRegistration.countDocuments({
-        event: event._id,
-      });
+  const dataWithExtra = data.map((event: any) => {
+    const hasRegistration = Boolean(event.registered);
+    let joinStatus: string | undefined = hasRegistration
+      ? event.registrationStatus == null
+        ? undefined
+        : event.registrationStatus
+      : 'ongoing';
+    joinStatus = withTimeExceeded(event.eventDate, joinStatus, hasRegistration);
 
-      const existingRegistration = await EventRegistration.findOne({
-        event: event._id,
-        user: userId,
-      }).lean();
+    const { registered, registrationStatus, eventCount, ...rest } = event;
+    return {
+      ...rest,
+      eventCount: eventCount || 0,
+      joinStatus,
+    };
+  });
 
-      let joinStatus = existingRegistration
-        ? existingRegistration.status
-        : 'ongoing';
-
-      if (event.eventDate) {
-        const eventDate = new Date(event.eventDate);
-        const now = new Date();
-
-        const eventYMD = new Date(
-          eventDate.getFullYear(),
-          eventDate.getMonth(),
-          eventDate.getDate()
-        );
-
-        const nowYMD = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate()
-        );
-
-        if (
-          eventYMD < nowYMD &&
-          (!existingRegistration || joinStatus === 'ongoing')
-        ) {
-          joinStatus = 'time_exceeded';
-        }
-      }
-
-      return {
-        ...event,
-        eventCount,
-        joinStatus,
-      };
-    })
-  );
-
-  return {
+  const result = {
     pagination,
     data: dataWithExtra,
   };
+  await RedisHelper.redisSet(cacheKey, result, query, EVENT_TTL);
+  return result;
 };
 const getByIdFromDB = async (id: string) => {
-  const event = await Event.findById(id).lean();
+  const cache = await RedisHelper.redisGet(`event:${id}`);
+  if (cache) {
+    return cache;
+  }
+
+  const event = await aggregateById(Event, id, [
+    registrationLookup(),
+    {
+      $addFields: {
+        registered: { $gt: [{ $size: '$myRegistration' }, 0] },
+        registrationStatus: { $arrayElemAt: ['$myRegistration.status', 0] },
+      },
+    },
+    { $unset: 'myRegistration' },
+  ]);
 
   if (!event) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Event not found');
   }
 
-  // Check registration for this event, otherwise joinStatus is 'none'
-  const existingRegistration = await EventRegistration.findOne({ event: id }).lean();
+  const hasRegistration = Boolean(event.registered);
+  let joinStatus = hasRegistration
+    ? event.registrationStatus || 'ongoing'
+    : 'ongoing';
+  joinStatus = withTimeExceeded(event.eventDate, joinStatus, hasRegistration);
 
-  let joinStatus = existingRegistration ? existingRegistration.status || 'ongoing' : 'ongoing';
+  delete event.registered;
+  delete event.registrationStatus;
 
-  // If eventDate is today or future, do not add enableToJoin.
-  // If past, and joinStatus would be 'none', set joinStatus to "time_exceeded"
-  if (event.eventDate) {
-    const eventDate = new Date(event.eventDate);
-    const now = new Date();
-    // Only date part
-    const eventYMD = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
-    const nowYMD = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    if (eventYMD < nowYMD && (!existingRegistration || joinStatus === 'ongoing')) {
-      joinStatus = 'time_exceeded';
-    }
-  }
-
-  return {
+  const result = {
     ...event,
     joinStatus,
   };
+  await RedisHelper.redisSet(`event:${id}`, result, {}, EVENT_TTL);
+  return result;
 };
 
 const updateInDB = async (id: string, payload: Partial<IEvent>) => {
@@ -152,16 +215,23 @@ const updateInDB = async (id: string, payload: Partial<IEvent>) => {
   if (!updated) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Event not found');
   }
+  await RedisHelper.bust('events:*', `event:${id}:*`, 'partner-overview:*');
   return updated;
 };
 
 const deleteFromDB = async (id: string) => {
-  const event = await Event.findById(id).lean();
-  if (!event) {
+  const deleted = await Event.findByIdAndDelete(id).lean();
+  if (!deleted) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Event not found');
   }
-  const deleted = await Event.findByIdAndDelete(id).lean();
   await EventRegistration.deleteMany({ event: id });
+  await RedisHelper.bust(
+    'events:*',
+    `event:${id}:*`,
+    'event-registrations:*',
+    'partner-overview:*',
+    'statistics:*',
+  );
   return deleted;
 };
 

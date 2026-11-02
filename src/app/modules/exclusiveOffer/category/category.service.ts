@@ -3,6 +3,9 @@ import { StatusCodes } from 'http-status-codes';
 import QueryBuilder from '../../../builder/QueryBuilder';
 import { ICategory } from './category.interface';
 import { Category } from './category.model';
+import { RedisHelper } from '../../../../tools/redis/redis.helper';
+
+const HOUR = 60 * 60;
 
 const createToDB = async (payload: ICategory) => {
   // convert name to lowercase and replace spaces with underscore
@@ -20,13 +23,20 @@ const createToDB = async (payload: ICategory) => {
   }
 
   // save modified name in db
-  return await Category.create({
+  const category = await Category.create({
     ...payload,
     name,
   });
+  await RedisHelper.bust('categories:*', 'offers:*', 'my-offers:*', 'favourite-offers:*');
+  return category;
 };
 
 const getAllFromDB = async (query: Record<string, any>) => {
+  const cache = await RedisHelper.redisGet('categories', query);
+  if (cache) {
+    return cache;
+  }
+
   const qb = new QueryBuilder(
     Category.find(),
     query
@@ -37,21 +47,24 @@ const getAllFromDB = async (query: Record<string, any>) => {
     .filter()
     .sort();
   
-  const data = await qb.modelQuery.lean();
-  const pagination = await qb.getPaginationInfo();
-  
-  return {
-    pagination,
-    data,
-  };
+  const { data, pagination } = await qb.exec(q => q.lean());
+  const result = { pagination, data };
+  await RedisHelper.redisSet('categories', result, query, HOUR);
+  return result;
 };
 
 const getByIdFromDB = async (id: string) => {
+  const cache = await RedisHelper.redisGet(`category:${id}`);
+  if (cache) {
+    return cache;
+  }
+
   const category = await Category.findById(id).lean();
   
   if (!category) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Category not found');
   }
+  await RedisHelper.redisSet(`category:${id}`, category, {}, HOUR);
   return category;
 };
 
@@ -78,6 +91,13 @@ const updateInDB = async (id: string, payload: Partial<ICategory>) => {
   if (!updated) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Category not found');
   }
+  await RedisHelper.bust(
+    'categories:*',
+    `category:${id}:*`,
+    'offers:*',
+    'my-offers:*',
+    'favourite-offers:*',
+  );
   return updated;
 };
 
@@ -87,6 +107,13 @@ const deleteFromDB = async (id: string) => {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Category not found');
   }
   const deleted = await Category.findByIdAndDelete(id).lean();
+  await RedisHelper.bust(
+    'categories:*',
+    `category:${id}:*`,
+    'offers:*',
+    'my-offers:*',
+    'favourite-offers:*',
+  );
   return deleted;
 };
 

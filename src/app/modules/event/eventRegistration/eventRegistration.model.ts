@@ -46,6 +46,8 @@ const eventRegistrationSchema = new Schema<IEventRegistration, EventRegistration
   { timestamps: true }
 );
 
+eventRegistrationSchema.index({ event: 1, user: 1 });
+
 export const EventRegistration = model<IEventRegistration, EventRegistrationModel>(
   'EventRegistration',
   eventRegistrationSchema

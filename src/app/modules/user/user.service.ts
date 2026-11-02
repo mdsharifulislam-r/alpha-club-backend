@@ -7,7 +7,9 @@ import unlinkFile, { unlinkFiles } from '../../../shared/unlinkFile';
 import generateOTP from '../../../util/generateOTP';
 import { IUser } from './user.interface';
 import { User } from './user.model';
+import { aggregatePage } from '../../builder/aggregatePage';
 import QueryBuilder from '../../builder/QueryBuilder';
+import { PipelineStage } from 'mongoose';
 import { userSearchableField } from './user.constant';
 import { Event } from '../event/event.model';
 import { ExclusiveOffer } from '../exclusiveOffer/exclusiveOffer.model';
@@ -19,6 +21,9 @@ import { USER_ROLES } from '../../../enums/user';
 import admin from '../../../helpers/firebaseConfig';
 import { UserProfileUpdateRequest } from './user.profileUpdateRequest';
 import { PartnerRequest } from '../partnerRequest/partnerRequest.model';
+import { RedisHelper } from '../../../tools/redis/redis.helper';
+
+const FIVE_MIN = 5 * 60;
 
 const createUserToDB = async (
   payload: Partial<IUser>,
@@ -63,6 +68,7 @@ const createUserToDB = async (
   };
   await User.findByIdAndUpdate(createUser._id, { $set: { authentication } });
 
+  await RedisHelper.bust('statistics:*', 'users:*');
   return { message: 'User created successfully' };
 };
 
@@ -293,6 +299,7 @@ const updateUserToDB = async (
     }
   }
 
+  await RedisHelper.bust(`user-profile:${userId}:*`, 'users:*', 'partner-users:*');
   return isExistUser;
 };
 
@@ -329,10 +336,17 @@ const updateSingleUserToDB = async (
     },
   );
 
+  await RedisHelper.bust(`user-profile:${userId}:*`, 'users:*', 'partner-users:*', 'statistics:*');
   return updatedUser;
 };
 
 const getAllUsers = async (query: Record<string, any>, userId: string) => {
+  const cacheKey = `users:${userId}`;
+  const cache = await RedisHelper.redisGet(cacheKey, query);
+  if (cache) {
+    return cache;
+  }
+
   const result = new QueryBuilder(
     User.find({ _id: { $ne: userId }, role: { $ne: USER_ROLES.SUPER_ADMIN } }),
     query,
@@ -343,22 +357,27 @@ const getAllUsers = async (query: Record<string, any>, userId: string) => {
     .filter()
     .sort();
 
-  const data = await result.modelQuery
-    .populate('application_form', 'membershipType')
-    .populate('profileUpdateRequest'); // ✅ added
+  const { data, pagination } = await result.exec(q =>
+    q
+      .populate('application_form', 'membershipType')
+      .populate('profileUpdateRequest'),
+  );
 
-  const pagination = await result.getPaginationInfo();
-
-  return {
-    pagination,
-    data,
-  };
+  const list = { pagination, data };
+  await RedisHelper.redisSet(cacheKey, list, query, FIVE_MIN);
+  return list;
 };
 
 const getAllPartnersUsers = async (
   query: Record<string, any>,
   userId: string,
 ) => {
+  const cacheKey = `partner-users:${userId}`;
+  const cache = await RedisHelper.redisGet(cacheKey, query);
+  if (cache) {
+    return cache;
+  }
+
   const qb = new QueryBuilder(
     User.find({
       _id: { $ne: userId },
@@ -372,40 +391,73 @@ const getAllPartnersUsers = async (
     .filter()
     .sort();
 
-  // ✅ Execute query
-  const users = await qb.modelQuery.lean();
+  const partnerStages: PipelineStage[] = [
+    {
+      $lookup: {
+        from: PartnerRequest.collection.collectionName,
+        let: { email: '$email' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  {
+                    $gt: [
+                      { $strLenCP: { $ifNull: ['$$email', ''] } },
+                      0,
+                    ],
+                  },
+                  { $eq: ['$contactEmail', '$$email'] },
+                ],
+              },
+            },
+          },
+          { $limit: 1 },
+          { $project: { partnerShipId: 1 } },
+        ],
+        as: 'partner',
+      },
+    },
+    {
+      $addFields: {
+        partnerShipId: { $arrayElemAt: ['$partner.partnerShipId', 0] },
+      },
+    },
+    { $unset: 'partner' },
+  ];
 
-  // ✅ Add partnerShipId to each user
-  const data = await Promise.all(
-    users.map(async (user: any) => {
-      const partner = await PartnerRequest.findOne({
-        contactEmail: user.email,
-      }).select('partnerShipId');
-
-      return {
-        name: user.name,
-        _id: user._id,
-        email: user.email,
-        partnerShipId: partner?.partnerShipId || null,
-      };
-    }),
+  const { data: users, pagination } = await aggregatePage(
+    User,
+    qb,
+    partnerStages,
+    ['partnerShipId'],
   );
 
-  const pagination = await qb.getPaginationInfo();
+  const data = users.map((user: any) => ({
+    name: user.name,
+    _id: user._id,
+    email: user.email,
+    partnerShipId: user.partnerShipId || null,
+  }));
 
-  return {
-    pagination,
-    data,
-  };
+  const result = { pagination, data };
+  await RedisHelper.redisSet(cacheKey, result, query, FIVE_MIN);
+  return result;
 };
 
 const getProfile = async (userId: string) => {
+  const cache = await RedisHelper.redisGet(`user-profile:${userId}`);
+  if (cache) {
+    return cache;
+  }
+
   const user = await User.findOne({ _id: userId })
     .populate({ path: 'application_form' })
     .lean();
   if (!user) {
     throw new ApiError(500, 'User not found');
   }
+  await RedisHelper.redisSet(`user-profile:${userId}`, user, {}, FIVE_MIN);
   return user;
 };
 
@@ -472,23 +524,27 @@ const approvePendingUser = async (userId: string, status: string) => {
       { new: true, upsert: true },
     ).catch(() => {});
   }
+  await RedisHelper.bust(`user-profile:${userId}:*`, 'users:*');
   return updateUserRequest;
 };
 
 const getStatistics = async (year?: string) => {
-  // Get total counts
-  const totalUser = await User.countDocuments();
-  const totalEvent = await Event.countDocuments();
-  const totalExclusiveOffer = await ExclusiveOffer.countDocuments();
-  const totalClubs = await Club.countDocuments();
+  const cache = await RedisHelper.redisGet('statistics', { year: year || '' });
+  if (cache) {
+    return cache;
+  }
 
-  // Determine the year to use
   const targetYear = year ? parseInt(year) : new Date().getFullYear();
-  const startDate = new Date(targetYear, 0, 1); // January 1st of the year
-  const endDate = new Date(targetYear, 11, 31, 23, 59, 59, 999); // December 31st of the year
+  const startDate = new Date(targetYear, 0, 1);
+  const endDate = new Date(targetYear, 11, 31, 23, 59, 59, 999);
 
-  // Get user statistics by month for the specified year
-  const userStats = await User.aggregate([
+  const [totalUser, totalEvent, totalExclusiveOffer, totalClubs, userStats] =
+    await Promise.all([
+      User.countDocuments(),
+      Event.countDocuments(),
+      ExclusiveOffer.countDocuments(),
+      Club.countDocuments(),
+      User.aggregate([
     {
       $match: {
         createdAt: {
@@ -506,7 +562,8 @@ const getStatistics = async (year?: string) => {
     {
       $sort: { _id: 1 },
     },
-  ]);
+  ]),
+    ]);
 
   // Create a map of month number to count
   const monthMap = new Map<number, number>();
@@ -535,7 +592,7 @@ const getStatistics = async (year?: string) => {
     userStatistics[month] = monthMap.get(index + 1) || 0;
   });
 
-  return {
+  const result = {
     totalUser,
     totalEvent,
     totalExclusiveOffer,
@@ -543,6 +600,8 @@ const getStatistics = async (year?: string) => {
     year: targetYear,
     userStatistics,
   };
+  await RedisHelper.redisSet('statistics', result, { year: year || '' }, FIVE_MIN);
+  return result;
 };
 
 const deleteMyAccount = async (userId: string) => {
@@ -550,6 +609,12 @@ const deleteMyAccount = async (userId: string) => {
   if (!user) {
     throw new ApiError(404, 'User not found');
   }
+  await RedisHelper.bust(
+    `user-profile:${userId}:*`,
+    'users:*',
+    'partner-users:*',
+    'statistics:*',
+  );
   return userId;
 };
 

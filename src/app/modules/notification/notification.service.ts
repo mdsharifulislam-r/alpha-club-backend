@@ -3,8 +3,17 @@ import ApiError from '../../../errors/ApiError';
 import QueryBuilder from '../../builder/QueryBuilder';
 import { Notification } from './notification.mode';
 import { NotificationCount } from './notificationCountModel';
+import { RedisHelper } from '../../../tools/redis/redis.helper';
+
+const MINUTE = 60;
 
 const getMyNotifications = async (userId: string, query: Record<string, any>) => {
+  const cacheKey = `notifications:${userId}`;
+  const cache = await RedisHelper.redisGet(cacheKey, query);
+  if (cache) {
+    return cache;
+  }
+
   const notificationQuery = new QueryBuilder(
     Notification.find({ receiver: userId },'-deleteReferenceId').populate('sender', 'name image').lean(),
     query
@@ -14,17 +23,18 @@ const getMyNotifications = async (userId: string, query: Record<string, any>) =>
     .filter()
     .sort();
 
-  const notifications = await notificationQuery.modelQuery;
+  const [{ data: notifications, pagination }, unreadCount] = await Promise.all([
+    notificationQuery.exec(),
+    Notification.countDocuments({ receiver: userId, seen: false }),
+  ]);
 
-  const unreadCount = await Notification.countDocuments({ recipient: userId, seen: false });
-
-  const pagination = await notificationQuery.getPaginationInfo();
-
-  return {
+  const result = {
     data: notifications,
     pagination,
     unreadCount,
   };
+  await RedisHelper.redisSet(cacheKey, result, query, MINUTE);
+  return result;
 };
 
 const markAsSeen = async (userId: string, notificationId: string) => {
@@ -37,14 +47,19 @@ const markAsSeen = async (userId: string, notificationId: string) => {
   if (!notification) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Notification not found or access denied');
   }
-  
 
+  await RedisHelper.bust(`notifications:${userId}:*`, `notification-count:${userId}:*`);
   return notification;
 };
 
 
 
 const notificationUnreadCount = async (userId: string) => {
+  const cache = await RedisHelper.redisGet(`notification-count:${userId}`);
+  if (cache) {
+    return cache;
+  }
+
   let notification = await NotificationCount.findOne({ user: userId }).lean();
 
   if (!notification) {
@@ -52,6 +67,7 @@ const notificationUnreadCount = async (userId: string) => {
     notification = createdNotification.toJSON ? createdNotification.toJSON() : createdNotification;
   }
 
+  await RedisHelper.redisSet(`notification-count:${userId}`, notification, {}, MINUTE);
   return notification;
 };
 
@@ -65,6 +81,7 @@ const updateNotificationCount = async (userId: string) => {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Notification not found or access denied');
   }
 
+  await RedisHelper.bust(`notifications:${userId}:*`, `notification-count:${userId}:*`);
   return notification;
 };
 
@@ -75,6 +92,7 @@ const deleteNotification = async (userId: string, notificationId: string) => {
   if (!notification) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Notification not found or access denied');
   }
+  await RedisHelper.bust(`notifications:${userId}:*`, `notification-count:${userId}:*`);
   return notification;
 };
 

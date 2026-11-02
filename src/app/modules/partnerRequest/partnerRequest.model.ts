@@ -28,6 +28,8 @@ const partnerShipApplicationSchema = new Schema<IPartnerRequest, PartnerRequestM
   { timestamps: true }
 );
 
+partnerShipApplicationSchema.index({ contactEmail: 1 });
+
 // Generate memberShipId before saving using increment logic
 
 const findLastMemberShipId = async (): Promise<string | undefined> => {

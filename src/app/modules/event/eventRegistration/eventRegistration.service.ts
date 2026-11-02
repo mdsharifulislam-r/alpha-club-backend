@@ -10,17 +10,21 @@ import { User } from '../../user/user.model';
 import { Notification } from '../../notification/notification.mode';
 import { NotificationCount } from '../../notification/notificationCountModel';
 import admin from '../../../../helpers/firebaseConfig';
+import { RedisHelper } from '../../../../tools/redis/redis.helper';
+
+const HOUR = 60 * 60;
 
 const createToDB = async (payload: IEventRegistration) => {
-  // Check if event exists
   const { event, user } = payload;
-  const eventExists = await Event.findById(event).lean();
+  const [eventExists, duplicate] = await Promise.all([
+    Event.findById(event).lean(),
+    EventRegistration.findOne({ event, user }).select('_id').lean(),
+  ]);
+
   if (!eventExists) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Event not found for registration');
   }
 
-  // Check for duplicate registration (same user for same event)
-  const duplicate = await EventRegistration.findOne({ event, user }).lean();
   if (duplicate) {
     throw new ApiError(StatusCodes.CONFLICT, 'User has already registered for this event');
   }
@@ -28,6 +32,7 @@ const createToDB = async (payload: IEventRegistration) => {
 
   // Create the registration
   const registration = await EventRegistration.create(payload);
+  await RedisHelper.bust('events:*', `event:${event}:*`, 'event-registrations:*');
   await EventRegistration.updateOne({ _id: registration._id }, { $set: { status: EventRegistrationStatus.PENDING } });
 
   // 🔔 Notification to all admins
@@ -91,56 +96,66 @@ const cancelEvent = async ({ event, user }: { event: string; user: string }) => 
   }
 
   await EventRegistration.deleteOne({ _id: registration._id });
+  await RedisHelper.bust('events:*', `event:${event}:*`, 'event-registrations:*');
 
   return registration;
 };
 
 
 const getAllFromDB = async (query: Record<string, any>) => {
-  const updatedQuery = {
-    ...query,
-  };
-
-  const searchableFields = []; // No direct searchable fields here; see below.
-
-  const qb = new QueryBuilder(
-    EventRegistration.find(),
-    updatedQuery
-  )
-    .paginate()
-    .fields()
-    .filter()
-    .sort();
-
-  // Get registrations, then populate user (manually, since QueryBuilder doesn't support deep search)
-  let data = await qb.modelQuery.populate('user').lean();
-  const pagination = await qb.getPaginationInfo();
-
-  // If searchTerm is present, filter the populated user fields manually in-memory
-  if (updatedQuery.searchTerm) {
-    const searchTerm = (updatedQuery.searchTerm as string).toLowerCase();
-    data = data.filter((doc: any) => {
-      const user = doc.user || {};
-      return (
-        (user.name && user.name.toLowerCase().includes(searchTerm)) ||
-        (user.email && user.email.toLowerCase().includes(searchTerm)) ||
-        (user.phone && user.phone.toLowerCase().includes(searchTerm))
-      );
-    });
+  const cache = await RedisHelper.redisGet('event-registrations', query);
+  if (cache) {
+    return cache;
   }
 
-  return {
+  const registrationFilter: Record<string, unknown> = {};
+
+  if (query.searchTerm) {
+    const pattern = String(query.searchTerm).replace(
+      /[.*+?^${}()|[\]\\]/g,
+      '\\$&',
+    );
+    const users = await User.find({
+      $or: [
+        { name: { $regex: pattern, $options: 'i' } },
+        { email: { $regex: pattern, $options: 'i' } },
+        { phone: { $regex: pattern, $options: 'i' } },
+      ],
+    })
+      .select('_id')
+      .lean();
+
+    registrationFilter.user = { $in: users.map(user => user._id) };
+  }
+
+  const qb = new QueryBuilder(EventRegistration.find(registrationFilter), query)
+    .filter()
+    .sort()
+    .fields()
+    .paginate();
+
+  const { data, pagination } = await qb.exec(q => q.populate('user').lean());
+
+  const result = {
     pagination,
     data,
   };
+  await RedisHelper.redisSet('event-registrations', result, query, HOUR);
+  return result;
 };
 
 const getByIdFromDB = async (id: string) => {
+  const cache = await RedisHelper.redisGet(`event-registration:${id}`);
+  if (cache) {
+    return cache;
+  }
+
   const registration = await EventRegistration.findById(id).lean().populate('user');
 
   if (!registration) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Event registration not found');
   }
+  await RedisHelper.redisSet(`event-registration:${id}`, registration, {}, HOUR);
   return registration;
 };
 
@@ -238,6 +253,12 @@ const updateInDB = async (id: string, payload: Partial<IEventRegistration>) => {
     );
   }
 
+  await RedisHelper.bust(
+    'events:*',
+    'event-registrations:*',
+    `event-registration:${id}:*`,
+    updated.event ? `event:${updated.event}:*` : 'events:*',
+  );
   return updated;
 };
 
@@ -247,6 +268,12 @@ const deleteFromDB = async (id: string) => {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Event registration not found');
   }
   const deleted = await EventRegistration.findByIdAndDelete(id).lean();
+  await RedisHelper.bust(
+    'events:*',
+    'event-registrations:*',
+    `event-registration:${id}:*`,
+    registration.event ? `event:${registration.event}:*` : 'events:*',
+  );
   return deleted;
 };
 

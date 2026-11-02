@@ -5,6 +5,9 @@ import { DailyAttendance } from './daily-attendance.model';
 import { IDailyAttendance } from './daily-attendance.interface';
 import dayjs from 'dayjs';
 import { User } from '../user/user.model';
+import { RedisHelper } from '../../../tools/redis/redis.helper';
+
+const FIVE_MIN = 5 * 60;
 /**
  * Create Attendance
  */
@@ -19,21 +22,21 @@ const createToDB = async (payload: IDailyAttendance) => {
   }
 
    payload.user = isExistUser._id as any;
-  // Check if attendance already marked today
-  const existing = await DailyAttendance.findOne({
-    user: isExistUser._id,
-    date: {
-      $gte: startOfDay,
-      $lte: endOfDay,
-    },
-  });
 
-  const hasLimit50 = await DailyAttendance.countDocuments({
+  const todayFilter = {
     date: {
       $gte: startOfDay,
       $lte: endOfDay,
     },
-  });
+  };
+
+  const [existing, hasLimit50] = await Promise.all([
+    DailyAttendance.findOne({
+      user: isExistUser._id,
+      ...todayFilter,
+    }).select('_id').lean(),
+    DailyAttendance.countDocuments(todayFilter),
+  ]);
 
   if (hasLimit50 >= 50) {
     throw new ApiError(StatusCodes.BAD_REQUEST,'You have reached 50 attendances for today');
@@ -46,13 +49,24 @@ const createToDB = async (payload: IDailyAttendance) => {
   // Force today's date
   payload.date = dayjs().toDate();
 
-  return await DailyAttendance.create(payload);
+  const attendance = await DailyAttendance.create(payload);
+  await RedisHelper.bust(
+    'attendances:*',
+    `attendance-overview:${payload.creator}:*`,
+    `redemption-overview:${payload.creator}:*`,
+  );
+  return attendance;
 };
 
 /**
  * Get All Attendance (with pagination, search, filter, sort)
  */
 const getAllFromDB = async (query: Record<string, any>) => {
+  const cache = await RedisHelper.redisGet('attendances', query);
+  if (cache) {
+    return cache;
+  }
+
   const qb = new QueryBuilder(DailyAttendance.find(), query)
     .paginate()
     .search([]) // No searchable fields unless you want to add
@@ -60,23 +74,23 @@ const getAllFromDB = async (query: Record<string, any>) => {
     .filter()
     .sort();
 
-  const data = await qb.modelQuery
-    .populate('user')
-    .populate('creator')
-    .lean();
-
-  const pagination = await qb.getPaginationInfo();
-
-  return {
-    pagination,
-    data,
-  };
+  const { data, pagination } = await qb.exec(q =>
+    q.populate('user').populate('creator').lean(),
+  );
+  const result = { pagination, data };
+  await RedisHelper.redisSet('attendances', result, query, FIVE_MIN);
+  return result;
 };
 
 /**
  * Get Attendance By ID
  */
 const getByIdFromDB = async (id: string) => {
+  const cache = await RedisHelper.redisGet(`attendance:${id}`);
+  if (cache) {
+    return cache;
+  }
+
   const attendance = await DailyAttendance.findById(id)
     .populate('user')
     .populate('creator')
@@ -86,6 +100,7 @@ const getByIdFromDB = async (id: string) => {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Attendance not found');
   }
 
+  await RedisHelper.redisSet(`attendance:${id}`, attendance, {}, FIVE_MIN);
   return attendance;
 };
 
@@ -105,6 +120,7 @@ const updateInDB = async (
     throw new ApiError(StatusCodes.NOT_FOUND, 'Attendance not found');
   }
 
+  await RedisHelper.bust('attendances:*', `attendance:${id}:*`, 'attendance-overview:*', 'redemption-overview:*');
   return updated;
 };
 
@@ -119,11 +135,16 @@ const deleteFromDB = async (id: string) => {
   }
 
   const deleted = await DailyAttendance.findByIdAndDelete(id).lean();
+  await RedisHelper.bust('attendances:*', `attendance:${id}:*`, 'attendance-overview:*', 'redemption-overview:*');
   return deleted;
 };
 
 
 const attendanceOverview = async (userId:string) => {
+  const cache = await RedisHelper.redisGet(`attendance-overview:${userId}`);
+  if (cache) {
+    return cache;
+  }
   
   const startOfDay = dayjs().startOf('day').toDate();
   const endOfDay = dayjs().endOf('day').toDate();
@@ -141,9 +162,8 @@ const attendanceOverview = async (userId:string) => {
     checkIn,
     remaining
   };
-
- return result;
-  
+  await RedisHelper.redisSet(`attendance-overview:${userId}`, result, {}, FIVE_MIN);
+  return result;
 };
 
 export const DailyAttendanceService = {

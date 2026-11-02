@@ -22,6 +22,7 @@ const clubMemberSchema = new Schema<IClubMember, ClubMemberModel>(
 
 // Ensure unique combination of user and club
 clubMemberSchema.index({ user: 1, club: 1 }, { unique: true });
+clubMemberSchema.index({ club: 1 });
 
 export const ClubMember = model<IClubMember, ClubMemberModel>('ClubMember',clubMemberSchema);
 

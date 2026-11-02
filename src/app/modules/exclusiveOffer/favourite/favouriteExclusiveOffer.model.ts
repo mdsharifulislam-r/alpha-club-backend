@@ -17,6 +17,8 @@ const favouriteExclusiveOfferSchema = new Schema<IFavouriteExclusiveOffer, Favou
   { timestamps: true }
 );
 
+favouriteExclusiveOfferSchema.index({ user: 1, exclusiveOffer: 1 });
+
 export const FavouriteExclusiveOffer = model<IFavouriteExclusiveOffer, FavouriteExclusiveOfferModel>(
   'FavouriteExclusiveOffer',
   favouriteExclusiveOfferSchema

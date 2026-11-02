@@ -1,5 +1,8 @@
 import { FilterQuery, Query } from 'mongoose';
 
+const escapeRegex = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 class QueryBuilder<T> {
   public modelQuery: Query<T[], T>;
   public query: Record<string, unknown>;
@@ -11,13 +14,15 @@ class QueryBuilder<T> {
 
   //searching
   search(searchableFields: string[]) {
-    if (this?.query?.searchTerm) {
+    const searchTerm = this?.query?.searchTerm;
+    if (searchTerm && searchableFields.length > 0) {
+      const pattern = escapeRegex(String(searchTerm));
       this.modelQuery = this.modelQuery.find({
         $or: searchableFields.map(
           field =>
             ({
               [field]: {
-                $regex: this.query.searchTerm,
+                $regex: pattern,
                 $options: 'i',
               },
             } as FilterQuery<T>)
@@ -101,6 +106,17 @@ class QueryBuilder<T> {
       page,
       totalPage,
     };
+  }
+
+  // List query and total count hit the database together.
+  async exec<R = T>(prepare?: (query: Query<T[], T>) => Query<R[], R>) {
+    const dataQuery = prepare ? prepare(this.modelQuery) : this.modelQuery;
+    const [data, pagination] = await Promise.all([
+      dataQuery,
+      this.getPaginationInfo(),
+    ]);
+
+    return { data, pagination };
   }
 }
 

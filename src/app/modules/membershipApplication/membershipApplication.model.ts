@@ -106,6 +106,9 @@ const memberShipApplicationSchema = new Schema<IMemberShipApplication, MemberShi
   { timestamps: true }
 );
 
+memberShipApplicationSchema.index({ email: 1, membershipStatus: 1 });
+memberShipApplicationSchema.index({ phone: 1, membershipStatus: 1 });
+
 // Generate memberShipId before saving using increment logic
 
 const findLastMemberShipId = async (): Promise<string | undefined> => {

@@ -3,18 +3,28 @@ import { StatusCodes } from 'http-status-codes';
 import QueryBuilder from '../../builder/QueryBuilder';
 import { IContactUs } from './contactUs.interface';
 import { ContactUs } from './contactUs.model';
+import { RedisHelper } from '../../../tools/redis/redis.helper';
+
+const HOUR = 60 * 60;
 
 /**
  * Create ContactUs
  */
 const createToDB = async (payload: IContactUs) => {
-  return await ContactUs.create(payload);
+  const contact = await ContactUs.create(payload);
+  await RedisHelper.bust('contact-us:*');
+  return contact;
 };
 
 /**
  * Get all ContactUs
  */
 const getAllFromDB = async (query: Record<string, any>) => {
+  const cache = await RedisHelper.redisGet('contact-us', query);
+  if (cache) {
+    return cache;
+  }
+
   const qb = new QueryBuilder(ContactUs.find(), query)
     .paginate()
     .search(['title', 'description'])
@@ -22,25 +32,28 @@ const getAllFromDB = async (query: Record<string, any>) => {
     .filter()
     .sort();
 
-  const data = await qb.modelQuery.lean();
-  const pagination = await qb.getPaginationInfo();
-
-  return {
-    pagination,
-    data,
-  };
+  const { data, pagination } = await qb.exec(q => q.lean());
+  const result = { pagination, data };
+  await RedisHelper.redisSet('contact-us', result, query, HOUR);
+  return result;
 };
 
 /**
  * Get ContactUs by ID
  */
 const getByIdFromDB = async (id: string) => {
+  const cache = await RedisHelper.redisGet(`contact-us-item:${id}`);
+  if (cache) {
+    return cache;
+  }
+
   const contactUs = await ContactUs.findById(id).lean();
 
   if (!contactUs) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'ContactUs not found');
   }
 
+  await RedisHelper.redisSet(`contact-us-item:${id}`, contactUs, {}, HOUR);
   return contactUs;
 };
 
@@ -62,6 +75,7 @@ const updateInDB = async (id: string, payload: Partial<IContactUs>) => {
     throw new ApiError(StatusCodes.NOT_FOUND, 'ContactUs not found');
   }
 
+  await RedisHelper.bust('contact-us:*', `contact-us-item:${id}:*`);
   return updated;
 };
 
@@ -76,6 +90,7 @@ const deleteFromDB = async (id: string) => {
   }
 
   await ContactUs.findByIdAndDelete(id);
+  await RedisHelper.bust('contact-us:*', `contact-us-item:${id}:*`);
 
   return contactUs;
 };

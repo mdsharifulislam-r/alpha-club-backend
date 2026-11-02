@@ -71,6 +71,8 @@ const exclusiveOfferSchema = new Schema<IExclusiveOffer, ExclusiveOfferModel>(
 );
 
 exclusiveOfferSchema.index({ location: "2dsphere" });
+exclusiveOfferSchema.index({ published: 1, status: 1 });
+exclusiveOfferSchema.index({ user: 1, status: 1, published: 1 });
 
 export const ExclusiveOffer = model<IExclusiveOffer, ExclusiveOfferModel>('ExclusiveOffer', exclusiveOfferSchema);
 
