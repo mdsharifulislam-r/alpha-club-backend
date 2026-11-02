@@ -1,7 +1,34 @@
-node_modules
-cache
+# Dependencies
+node_modules/
 
-/winston
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+winston/
+
+# Cache
+cache/
+.npm/
+.eslintcache
+
+# Uploads and user-generated files
+uploads/
+
+# Firebase credentials
 fcmServiceAccountKey.json
+
+# Local configuration
 config.bat
-uploads
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
